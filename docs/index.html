@@ -29,27 +29,27 @@
   li { padding:6px 0; border-bottom:1px solid var(--line); }
   .row { display:flex; gap:8px; align-items:center; margin-top:10px; font-size:14px; }
   .row input { width:auto; }
-  details summary { cursor:pointer; color:var(--mut); font-size:14px; }
+  .link { background:none; border:none; color:var(--mut); font-size:13px; text-decoration:underline; padding:8px 0; }
 </style>
 </head>
 <body>
 <main>
   <h1>🎙️ สั่งหุ่นด้วยเสียง</h1>
 
-  <!-- ===== ตั้งค่า + ล็อกอิน ===== -->
-  <section class="card" id="loginCard">
-    <details id="setup">
-      <summary>ตั้งค่า Firebase (ทำครั้งเดียว)</summary>
-      <label>Web API Key</label><input id="apiKey" autocomplete="off">
-      <label>Database URL</label><input id="dbUrl" placeholder="https://xxxx-default-rtdb....firebasedatabase.app" autocomplete="off">
-    </details>
+  <!-- ขึ้นเฉพาะตอนยังไม่ได้ใส่ค่าในโค้ด -->
+  <section class="card" id="configErr" hidden>
+    <div class="bad">ยังไม่ได้ใส่ API_KEY หรือ DB_URL ในโค้ด<br>เปิดไฟล์ index.html แล้วแก้ที่บล็อก CONFIG ด้านบนของ &lt;script&gt;</div>
+  </section>
+
+  <!-- ล็อกอิน: ขึ้นครั้งแรกครั้งเดียวต่อเครื่อง หลังจากนั้นเข้าหน้าควบคุมเลย -->
+  <section class="card" id="loginCard" hidden>
     <label>อีเมล</label><input id="email" type="email" autocomplete="username">
-    <label>รหัสผ่าน (ไม่ถูกบันทึกไว้ในเครื่อง)</label><input id="pass" type="password" autocomplete="current-password">
+    <label>รหัสผ่าน</label><input id="pass" type="password" autocomplete="current-password">
     <button class="primary" id="loginBtn">เข้าสู่ระบบ</button>
     <div id="loginMsg" class="bad" style="margin-top:8px;font-size:14px"></div>
   </section>
 
-  <!-- ===== หน้าควบคุม ===== -->
+  <!-- หน้าควบคุม -->
   <section id="mainCard" hidden>
     <div class="card">
       <label>ภาษา</label>
@@ -61,6 +61,8 @@
     </div>
 
     <button id="stop">⛔ หยุด (STOP)</button>
+    <button id="ping" style="width:100%;margin-top:10px">🔌 ทดสอบเชื่อมต่อ Cloud</button>
+    <div id="pingMsg" style="font-size:14px;margin-top:6px"></div>
 
     <div class="card" style="margin-top:12px">
       <div style="font-size:13px;color:var(--mut)">ปุ่มสำรอง (ถ้าไมค์ใช้ไม่ได้)</div>
@@ -71,34 +73,28 @@
       <div style="font-size:13px;color:var(--mut);margin-bottom:6px">คำสั่งที่ส่งล่าสุด</div>
       <ul id="log"></ul>
     </div>
+    <button class="link" id="logout">ออกจากระบบ (เปลี่ยนบัญชี)</button>
   </section>
 </main>
 
 <script>
-/* ---------- ตั้งค่าและ helper ---------- */
+/* =====================================================================
+   CONFIG  ← แก้ตรงนี้ที่เดียว ใส่ค่าระหว่างเครื่องหมาย " "
+   ห้ามใส่รหัสผ่านที่นี่ เพราะหน้านี้เป็นสาธารณะ ใครเปิดก็เห็น
+   ===================================================================== */
+const CONFIG = {
+  API_KEY: "AIzaSyDXgAvKforpZ-46SbJi4nT3ecjcoHBhOVc",   // Web API Key จาก Firebase  เช่น "AIzaSy...."
+  DB_URL:  "https://project-robot-esp32-67-default-rtdb.asia-southeast1.firebasedatabase.app/",   // Database URL เช่น "https://xxxx-default-rtdb.asia-southeast1.firebasedatabase.app"
+  EMAIL:   "gtest@gmail.com",   // อีเมลของ user ใน Firebase (ใส่ไว้จะกรอกให้อัตโนมัติ)
+};
+/* ===================================================================== */
+
 const $ = id => document.getElementById(id);
 const store = {
   get(k){ try { return localStorage.getItem(k) || ""; } catch(e){ return ""; } },
-  set(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
+  set(k,v){ try { localStorage.setItem(k,v); } catch(e){} },
+  del(k){ try { localStorage.removeItem(k); } catch(e){} }
 };
-
-// เปิดลิงก์แบบ index.html?k=API_KEY&d=DB_URL ครั้งเดียว เพื่อกรอกค่าให้อัตโนมัติ (แล้วลบออกจาก URL)
-(function readQuery(){
-  const q = new URLSearchParams(location.search);
-  if (q.get("k")) store.set("apiKey", q.get("k"));
-  if (q.get("d")) store.set("dbUrl", q.get("d"));
-  if (q.has("k") || q.has("d")) history.replaceState(null, "", location.pathname);
-})();
-// ===== ใส่ค่าตรงนี้ได้เลย (ระหว่างเครื่องหมาย " ") แล้วไม่ต้องตั้งค่าบนมือถือ =====
-// ห้ามใส่รหัสผ่านลงในไฟล์นี้ เพราะหน้านี้เป็นสาธารณะ ใครเปิดก็เห็น
-const DEFAULT_API_KEY = "AIzaSyDXgAvKforpZ-46SbJi4nT3ecjcoHBhOVc";   // Web API Key จาก Firebase
-const DEFAULT_DB_URL  = "gtest@gmail.com";   // เช่น https://xxxx-default-rtdb.asia-southeast1.firebasedatabase.app
-const DEFAULT_EMAIL   = "123456";   // อีเมลของ user ใน Firebase (ไม่ใส่ก็ได้)
-// =====================================================================
-$("apiKey").value = DEFAULT_API_KEY || store.get("apiKey");
-$("dbUrl").value  = DEFAULT_DB_URL  || store.get("dbUrl");
-$("email").value  = DEFAULT_EMAIL   || store.get("email");
-if (!$("apiKey").value || !$("dbUrl").value) $("setup").open = true;
 
 /* ---------- แปลงข้อความเป็นคำสั่ง ---------- */
 // ลำดับสำคัญ: "stop" อยู่บนสุดเพื่อให้คำสั่งหยุดถูกจับก่อนเสมอ
@@ -123,39 +119,68 @@ function parseCommand(text) {
 }
 //END_PARSE
 
-/* ---------- Firebase (REST) ---------- */
-let idToken = "", tokenExp = 0, creds = null;
+/* ---------- Firebase Auth (เก็บ refresh token ไว้ ไม่เก็บรหัสผ่าน) ---------- */
+let idToken = "", tokenExp = 0;
 
-async function login() {
+async function signIn(email, password) {
   const r = await fetch(
-    "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + encodeURIComponent($("apiKey").value.trim()),
+    "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + encodeURIComponent(CONFIG.API_KEY),
     { method:"POST", headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({ email:creds.email, password:creds.password, returnSecureToken:true }) });
+      body: JSON.stringify({ email, password, returnSecureToken:true }) });
   const j = await r.json();
   if (!r.ok) throw new Error((j.error && j.error.message) || ("HTTP " + r.status));
   idToken = j.idToken;
-  tokenExp = Date.now() + 50*60*1000;     // token อายุ 1 ชม. ต่ออายุก่อนหมด
+  tokenExp = Date.now() + (Number(j.expiresIn) || 3600) * 1000 - 5*60*1000;
+  store.set("rt", j.refreshToken);      // ครั้งต่อไปใช้ตัวนี้ล็อกอินเอง
+}
+
+async function refreshToken() {
+  const rt = store.get("rt");
+  if (!rt) { const e = new Error("ยังไม่ได้ล็อกอิน"); e.fatal = true; throw e; }
+  const r = await fetch("https://securetoken.googleapis.com/v1/token?key=" + encodeURIComponent(CONFIG.API_KEY),
+    { method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" },
+      body: "grant_type=refresh_token&refresh_token=" + encodeURIComponent(rt) });
+  const j = await r.json();
+  if (!r.ok) { const e = new Error((j.error && j.error.message) || ("HTTP " + r.status)); e.fatal = true; throw e; }
+  idToken = j.id_token;
+  tokenExp = Date.now() + (Number(j.expires_in) || 3600) * 1000 - 5*60*1000;
+  if (j.refresh_token) store.set("rt", j.refresh_token);
+}
+
+async function ensureToken() {
+  if (!idToken || Date.now() > tokenExp) await refreshToken();
 }
 
 async function db(method, path, body) {
-  if (!idToken || Date.now() > tokenExp) await login();
-  const base = $("dbUrl").value.trim().replace(/\/+$/, "");
-  const r = await fetch(base + path + ".json?auth=" + encodeURIComponent(idToken),
-    { method, headers:{ "Content-Type":"application/json" }, body: body ? JSON.stringify(body) : undefined });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  return r.json();
+  const base = CONFIG.DB_URL.trim().replace(/\/+$/, "");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await ensureToken();
+    const r = await fetch(base + path + ".json?auth=" + encodeURIComponent(idToken),
+      { method, headers:{ "Content-Type":"application/json" }, body: body ? JSON.stringify(body) : undefined });
+    if (r.status === 401 && attempt === 0) { idToken = ""; continue; }   // token เสีย -> ขอใหม่แล้วลองอีกครั้ง
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }
 }
+
+/* ---------- แสดงหน้าต่าง ๆ ---------- */
+function showLogin() {
+  $("mainCard").hidden = true; $("loginCard").hidden = false;
+  $("email").value = CONFIG.EMAIL || store.get("email");
+}
+function showMain() { $("loginCard").hidden = true; $("mainCard").hidden = false; }
 
 $("loginBtn").onclick = async () => {
   $("loginMsg").textContent = "";
-  creds = { email:$("email").value.trim(), password:$("pass").value };
+  const email = $("email").value.trim();
   try {
-    await login();
-    store.set("apiKey", $("apiKey").value.trim()); store.set("dbUrl", $("dbUrl").value.trim()); store.set("email", creds.email);
+    await signIn(email, $("pass").value);
+    store.set("email", email);
     $("pass").value = "";
-    $("loginCard").hidden = true; $("mainCard").hidden = false;
+    showMain();
   } catch (e) { $("loginMsg").textContent = "ล็อกอินไม่สำเร็จ: " + e.message; }
 };
+$("logout").onclick = () => { store.del("rt"); idToken = ""; showLogin(); };
 
 /* ---------- ส่งคำสั่ง ---------- */
 let lastAction = "", lastAt = 0;
@@ -171,6 +196,7 @@ async function sendCommand(action, text, source) {
   } catch (e) {
     addLog(`❌ ${action} ส่งไม่สำเร็จ: ${e.message}`);
     $("state").innerHTML = `<span class="bad">ส่งไม่สำเร็จ: ${e.message}</span>`;
+    if (e.fatal) showLogin();     // refresh token ใช้ไม่ได้แล้ว -> ให้ล็อกอินใหม่
   }
 }
 function addLog(s) {
@@ -179,6 +205,20 @@ function addLog(s) {
   $("log").prepend(li);
   while ($("log").children.length > 10) $("log").lastChild.remove();
 }
+
+/* ---------- ทดสอบ Cloud: เขียนแล้วอ่านกลับ ---------- */
+$("ping").onclick = async () => {
+  const el = $("pingMsg");
+  el.className = ""; el.textContent = "กำลังทดสอบ…";
+  const t0 = performance.now(), stamp = Date.now();
+  try {
+    await db("PUT", "/debug/phone_ping", { ts: stamp });
+    const back = await db("GET", "/debug/phone_ping");
+    const ms = Math.round(performance.now() - t0);
+    if (back && back.ts === stamp) { el.className = "ok"; el.textContent = `✅ เขียนและอ่านกลับจาก Firebase ได้ (${ms} ms)`; }
+    else { el.className = "bad"; el.textContent = "⚠️ เขียนได้แต่อ่านกลับมาไม่ตรง"; }
+  } catch (e) { el.className = "bad"; el.textContent = "❌ ติดต่อ Firebase ไม่ได้: " + e.message; }
+};
 
 /* ---------- ปุ่มสำรอง + STOP ---------- */
 COMMANDS.filter(c => c.action !== "stop").forEach(c => {
@@ -191,7 +231,7 @@ $("stop").onclick = () => sendCommand("stop", "", "button");
 
 /* ---------- ไมโครโฟน (Web Speech API) ---------- */
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null, listening = false, keepGoing = false;
+let rec = null, listening = false, keepGoing = false, gotResult = false;
 
 function setMic() {
   $("mic").classList.toggle("on", listening);
@@ -205,25 +245,37 @@ function startListen() {
   rec.interimResults = true;
   rec.continuous = false;
   rec.maxAlternatives = 1;
+  gotResult = false;
+  let lastText = "", handled = false;     // กันกรณี Android ไม่ส่งสถานะ "final" มาให้
+  rec.onstart = () => { $("state").textContent = "กำลังฟัง… พูดได้เลย"; };
   rec.onresult = e => {
+    gotResult = true;
     let interim = "", final = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const r = e.results[i];
       if (r.isFinal) final += r[0].transcript; else interim += r[0].transcript;
     }
-    $("heard").textContent = final || interim || "—";
-    if (final) handleFinal(final.trim());
+    const shown = final || interim;
+    if (shown) lastText = shown.trim();
+    $("heard").textContent = shown || "—";
+    if (final && !handled) { handled = true; handleFinal(final.trim()); }
   };
   rec.onerror = e => {
-    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-      keepGoing = false;
-      $("state").innerHTML = '<span class="bad">ไม่ได้รับอนุญาตใช้ไมค์ (ตรวจสอบสิทธิ์ของเบราว์เซอร์ และต้องเปิดผ่าน https)</span>';
-    } else if (e.error !== "no-speech" && e.error !== "aborted") {
-      $("state").innerHTML = `<span class="bad">ข้อผิดพลาดของไมค์: ${e.error}</span>`;
-    }
+    const msg = {
+      "not-allowed": "ไม่ได้รับอนุญาตใช้ไมค์ (ตรวจสิทธิ์ของเบราว์เซอร์ และต้องเปิดผ่าน https)",
+      "service-not-allowed": "ไม่ได้รับอนุญาตใช้บริการรู้จำเสียง",
+      "no-speech": "ไม่ได้ยินเสียงพูด ลองพูดใกล้ไมค์และดังขึ้น",
+      "audio-capture": "ไม่พบไมโครโฟน",
+      "network": "รู้จำเสียงใช้ไม่ได้เพราะเน็ตมีปัญหา",
+      "language-not-supported": "ไม่รองรับภาษานี้",
+    }[e.error] || ("ข้อผิดพลาดของไมค์: " + e.error);
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") keepGoing = false;
+    if (e.error !== "aborted") $("state").innerHTML = `<span class="bad">${msg}</span>`;
   };
   rec.onend = () => {
     listening = false; setMic();
+    if (!handled && lastText) { handled = true; handleFinal(lastText); }   // จบการฟังแล้ว ใช้ข้อความล่าสุดที่ได้ยิน
+    else if (!gotResult && !keepGoing && !$("state").textContent.includes("ไม่")) $("state").innerHTML = '<span class="bad">จบการฟังโดยไม่ได้ข้อความ ลองใหม่</span>';
     if (keepGoing) setTimeout(startListen, 200);
   };
   try { rec.start(); listening = true; setMic(); } catch (e) { /* กำลังเริ่มอยู่แล้ว */ }
@@ -231,8 +283,11 @@ function startListen() {
 
 function handleFinal(text) {
   const action = parseCommand(text);
-  if (action) sendCommand(action, text, "voice");
-  else $("state").innerHTML = `<span class="bad">ไม่เข้าใจคำสั่ง: “${text}”</span>`;
+  if (action) { $("state").textContent = `จับคำสั่งได้: ${action} กำลังส่ง…`; sendCommand(action, text, "voice"); }
+  else {
+    $("state").innerHTML = `<span class="bad">ไม่เข้าใจคำสั่ง: “${text}”</span>`;
+    addLog(`❓ ได้ยินว่า “${text}” แต่ไม่ตรงกับคำสั่งใด (ยังไม่ส่ง)`);
+  }
 }
 
 $("mic").onclick = () => {
@@ -240,6 +295,19 @@ $("mic").onclick = () => {
   else { keepGoing = $("cont").checked; startListen(); }
 };
 $("cont").onchange = () => { if (!$("cont").checked) keepGoing = false; };
+
+/* ---------- เริ่มต้น: ถ้าเคยล็อกอินแล้ว เข้าหน้าควบคุมเลย ---------- */
+(async function boot() {
+  if (!CONFIG.API_KEY || !CONFIG.DB_URL) { $("configErr").hidden = false; return; }
+  if (!store.get("rt")) { showLogin(); return; }
+  try {
+    await refreshToken();
+    showMain();
+  } catch (e) {
+    if (e.fatal) { store.del("rt"); showLogin(); }
+    else { showMain(); $("state").innerHTML = '<span class="bad">ต่อเน็ตไม่ได้ในตอนนี้ จะลองใหม่ตอนส่งคำสั่ง</span>'; }
+  }
+})();
 </script>
 </body>
 </html>
