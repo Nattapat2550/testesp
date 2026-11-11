@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Robot Dashboard</title>
+<style>
+  :root { --bg:#f6f6f4; --fg:#1d1d1b; --card:#fff; --line:#d8d8d2; --mut:#6b6b64; --ok:#1a7f4b; --warn:#b26a00; --bad:#c62828; --acc:#2456d6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#161616; --fg:#eeeeea; --card:#222; --line:#3a3a36; --mut:#9a9a92; --ok:#4cc38a; --warn:#f0b24a; --bad:#ff6b6b; --acc:#7da2ff; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:16px; font-family:system-ui,"Noto Sans Thai",sans-serif; background:var(--bg); color:var(--fg); }
+  main { max-width:960px; margin:0 auto; }
+  header { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
+  h1 { font-size:20px; margin:0; }
+  h2 { font-size:14px; margin:0 0 8px; color:var(--mut); font-weight:600; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin-bottom:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .row { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--line); font-size:15px; }
+  .row:last-child { border-bottom:none; }
+  .row span:first-child { color:var(--mut); }
+  .badge { font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid currentColor; white-space:nowrap; }
+  .ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  .banner { padding:10px 14px; border-radius:10px; margin-bottom:10px; font-weight:600; border:1px solid currentColor; }
+  .title { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-weight:600; }
+  label { font-size:13px; color:var(--mut); display:block; margin:8px 0 4px; }
+  input, select { width:100%; padding:10px; font-size:16px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); }
+  button { font-size:15px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--fg); cursor:pointer; }
+  button.primary { background:var(--acc); color:#fff; border-color:var(--acc); width:100%; margin-top:12px; }
+  .link { background:none; border:none; color:var(--mut); text-decoration:underline; font-size:13px; padding:4px; }
+  a { color:var(--acc); }
+  .sel { display:flex; gap:8px; flex-wrap:wrap; } .sel > div { flex:1; min-width:140px; }
+  svg { width:100%; height:auto; display:block; }
+  #foot { font-size:12px; color:var(--mut); margin-top:8px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🤖 Robot Dashboard</h1>
+    <div>
+      <span id="gwBadge" class="badge">—</span>
+      <a href="./index.html" style="font-size:13px;margin-left:8px">หน้าสั่งเสียง</a>
+      <button class="link" id="logout" hidden>ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <section class="card" id="configErr" hidden>
+    <div class="bad">ยังไม่ได้ใส่ API_KEY หรือ DB_URL ในโค้ด แก้ที่บล็อก CONFIG ด้านบนของ &lt;script&gt;</div>
+  </section>
+
+  <section class="card" id="loginCard" hidden style="max-width:420px">
+    <label>อีเมล</label><input id="email" type="email" autocomplete="username">
+    <label>รหัสผ่าน</label><input id="pass" type="password" autocomplete="current-password">
+    <button class="primary" id="loginBtn">เข้าสู่ระบบ</button>
+    <div id="loginMsg" class="bad" style="margin-top:8px;font-size:14px"></div>
+  </section>
+
+  <section id="mainCard" hidden>
+    <div id="banners"></div>
+
+    <div class="grid">
+      <div class="card"><h2>Gateway</h2><div id="gw"></div></div>
+      <div class="card"><h2>คำสั่งล่าสุด</h2><div id="ack"></div></div>
+    </div>
+
+    <h2 style="margin:4px 0 8px">ค่าล่าสุดของแต่ละ Node</h2>
+    <div class="grid" id="nodes"></div>
+
+    <div class="card">
+      <h2>กราฟย้อนหลัง (60 ค่าล่าสุด)</h2>
+      <div class="sel">
+        <div><label>Node</label><select id="selNode"></select></div>
+        <div><label>ค่าที่ต้องการดู</label><select id="selMetric"></select></div>
+      </div>
+      <svg id="chart" viewBox="0 0 600 240" role="img" aria-label="กราฟค่าเซนเซอร์ย้อนหลัง"></svg>
+    </div>
+    <div id="foot"></div>
+  </section>
+</main>
+
+<script>
+/* =====================================================================
+   CONFIG ← ใส่ค่าให้ตรงกับหน้าสั่งเสียง (index.html)
+   ห้ามใส่รหัสผ่านที่นี่
+   ===================================================================== */
+const CONFIG = {
+  API_KEY: "",
+  DB_URL:  "",
+  EMAIL:   "",
+};
+/* ===================================================================== */
+
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try { return localStorage.getItem(k) || ""; } catch(e){ return ""; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch(e){} },
+  del(k){ try { localStorage.removeItem(k); } catch(e){} }
+};
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+/* ---------- Auth (ใช้ refresh token ตัวเดียวกับหน้าสั่งเสียง ถ้าอยู่โดเมนเดียวกัน) ---------- */
+let idToken = "", tokenExp = 0;
+
+async function signIn(email, password) {
+  const r = await fetch("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + encodeURIComponent(CONFIG.API_KEY),
+    { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ email, password, returnSecureToken:true }) });
+  const j = await r.json();
+  if (!r.ok) throw new Error((j.error && j.error.message) || ("HTTP " + r.status));
+  idToken = j.idToken;
+  tokenExp = Date.now() + (Number(j.expiresIn) || 3600) * 1000 - 5*60*1000;
+  store.set("rt", j.refreshToken);
+}
+async function refreshToken() {
+  const rt = store.get("rt");
+  if (!rt) { const e = new Error("ยังไม่ได้ล็อกอิน"); e.fatal = true; throw e; }
+  const r = await fetch("https://securetoken.googleapis.com/v1/token?key=" + encodeURIComponent(CONFIG.API_KEY),
+    { method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" },
+      body: "grant_type=refresh_token&refresh_token=" + encodeURIComponent(rt) });
+  const j = await r.json();
+  if (!r.ok) { const e = new Error((j.error && j.error.message) || ("HTTP " + r.status)); e.fatal = true; throw e; }
+  idToken = j.id_token;
+  tokenExp = Date.now() + (Number(j.expires_in) || 3600) * 1000 - 5*60*1000;
+  if (j.refresh_token) store.set("rt", j.refresh_token);
+}
+async function ensureToken() { if (!idToken || Date.now() > tokenExp) await refreshToken(); }
+
+async function dbGet(path, extra) {
+  const base = CONFIG.DB_URL.trim().replace(/\/+$/, "");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await ensureToken();
+    const r = await fetch(base + path + ".json?auth=" + encodeURIComponent(idToken) + (extra ? "&" + extra : ""));
+    if (r.status === 401 && attempt === 0) { idToken = ""; continue; }
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }
+}
+
+function showLogin() { $("mainCard").hidden = true; $("loginCard").hidden = false; $("logout").hidden = true; $("email").value = CONFIG.EMAIL || store.get("email"); stopPolling(); }
+function showMain()  { $("loginCard").hidden = true; $("mainCard").hidden = false; $("logout").hidden = false; startPolling(); }
+
+$("loginBtn").onclick = async () => {
+  $("loginMsg").textContent = "";
+  const email = $("email").value.trim();
+  try { await signIn(email, $("pass").value); store.set("email", email); $("pass").value = ""; showMain(); }
+  catch (e) { $("loginMsg").textContent = "ล็อกอินไม่สำเร็จ: " + e.message; }
+};
+$("logout").onclick = () => { store.del("rt"); idToken = ""; showLogin(); };
+
+/* ---------- แสดงผล ---------- */
+const LABELS = {
+  ultrasonic_cm: ["ระยะ Ultrasonic", "cm"], pitch_deg: ["Pitch", "°"], roll_deg: ["Roll", "°"],
+  temp_c: ["อุณหภูมิ", "°C"], humid_pct: ["ความชื้น", "%"], ldr_raw: ["แสง (LDR)", ""], battery_volt: ["แบตเตอรี่", "V"],
+};
+const HIDDEN_KEYS = new Set(["node_id", "ts", "seq"]);
+const now = () => Date.now() / 1000;
+
+function ageInfo(ts, okLimit, warnLimit) {
+  if (!ts) return { text: "ไม่มีข้อมูล", cls: "bad" };
+  const age = Math.max(0, Math.round(now() - ts));
+  const text = age < 60 ? age + " วินาทีที่แล้ว" : Math.round(age / 60) + " นาทีที่แล้ว";
+  return { text, cls: age <= okLimit ? "ok" : (age <= warnLimit ? "warn" : "bad"), age };
+}
+function addRow(parent, k, v, cls) {
+  const r = el("div", "row");
+  r.appendChild(el("span", "", k));
+  r.appendChild(el("span", cls || "", v));
+  parent.appendChild(r);
+}
+function fmt(v) { return typeof v === "number" ? (Number.isInteger(v) ? String(v) : v.toFixed(1)) : String(v); }
+function fmtUptime(s) { s = Math.floor(s || 0); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h} ชม. ${m} นาที` : `${m} นาที ${s % 60} วินาที`; }
+
+let latestCache = {};
+
+function renderStatus(st) {
+  const gw = $("gw"); gw.textContent = "";
+  const banners = $("banners"); banners.textContent = "";
+  const badge = $("gwBadge");
+  if (!st) {
+    badge.textContent = "Gateway: ไม่มีข้อมูล"; badge.className = "badge bad";
+    addRow(gw, "สถานะ", "ยังไม่เคยส่งสถานะ", "bad");
+    return;
+  }
+  const a = ageInfo(st.ts, 15, 45);
+  badge.textContent = a.cls === "ok" ? "Gateway ออนไลน์" : "Gateway ขาดการติดต่อ"; badge.className = "badge " + (a.cls === "ok" ? "ok" : "bad");
+  if (a.cls !== "ok") { const b = el("div", "banner bad", "⚠️ Gateway ไม่ได้ส่งสถานะมา " + a.text); banners.appendChild(b); }
+  if (st.estop)    banners.appendChild(el("div", "banner bad",  "⛔ E-STOP ถูกกด หุ่นปฏิเสธทุกคำสั่งจนกว่าจะรีเซ็ตบอร์ด"));
+  if (st.obstacle) banners.appendChild(el("div", "banner warn", "🚧 ตรวจพบสิ่งกีดขวางด้านหน้า"));
+
+  addRow(gw, "อัปเดตล่าสุด", a.text, a.cls);
+  addRow(gw, "เปิดเครื่องมาแล้ว", fmtUptime(st.uptime_s));
+  addRow(gw, "สัญญาณ Wi-Fi", fmt(st.wifi_rssi) + " dBm");
+  addRow(gw, "หน่วยความจำว่าง", Math.round((st.free_heap || 0) / 1024) + " KB");
+  addRow(gw, "ข้อมูลค้างในบัฟเฟอร์", fmt(st.buffered_items || 0) + " รายการ", (st.buffered_items || 0) > 0 ? "warn" : "");
+  const m = st.metrics || {};
+  addRow(gw, "ส่งขึ้น Cloud สำเร็จ/ล้มเหลว", fmt(m.http_ok_count || 0) + " / " + fmt(m.http_fail_count || 0));
+  addRow(gw, "Latency ต่ำสุด/เฉลี่ย/สูงสุด", `${fmt(m.latency_min_ms || 0)} / ${fmt(m.latency_avg_ms || 0)} / ${fmt(m.latency_max_ms || 0)} ms`);
+}
+
+function renderAck(ack) {
+  const box = $("ack"); box.textContent = "";
+  if (!ack) { addRow(box, "สถานะ", "ยังไม่มีคำสั่ง"); return; }
+  const cls = ack.status === "executed" ? "ok" : (ack.status === "rejected" ? "bad" : "warn");
+  addRow(box, "คำสั่ง", ack.action || "-");
+  addRow(box, "ผล", ack.status || "-", cls);
+  if (ack.reason) addRow(box, "เหตุผล", ack.reason);
+  addRow(box, "เมื่อ", ageInfo(ack.ts, 1e9, 1e9).text);
+}
+
+function renderNodes(latest) {
+  const grid = $("nodes"); grid.textContent = "";
+  const ids = Object.keys(latest || {}).sort();
+  if (!ids.length) { grid.appendChild(el("div", "card", "ยังไม่มีข้อมูลเซนเซอร์")); return; }
+  ids.forEach(id => {
+    const d = latest[id] || {};
+    const a = ageInfo(d.ts, 15, 40);
+    const card = el("div", "card");
+    const t = el("div", "title");
+    t.appendChild(el("span", "", id));
+    t.appendChild(el("span", "badge " + a.cls, a.text));
+    card.appendChild(t);
+    Object.keys(d).filter(k => !HIDDEN_KEYS.has(k)).forEach(k => {
+      const [label, unit] = LABELS[k] || [k, ""];
+      addRow(card, label, fmt(d[k]) + (unit ? " " + unit : ""));
+    });
+    if (d.seq !== undefined) addRow(card, "seq", fmt(d.seq));
+    grid.appendChild(card);
+  });
+}
+
+function syncSelectors(latest) {
+  const selNode = $("selNode"), selMetric = $("selMetric");
+  const ids = Object.keys(latest || {}).sort();
+  const curNode = selNode.value;
+  if (selNode.options.length !== ids.length || ids.some((id, i) => selNode.options[i].value !== id)) {
+    selNode.textContent = "";
+    ids.forEach(id => { const o = el("option", "", id); o.value = id; selNode.appendChild(o); });
+    if (ids.includes(curNode)) selNode.value = curNode;
+  }
+  const node = latest[selNode.value] || {};
+  const keys = Object.keys(node).filter(k => !HIDDEN_KEYS.has(k) && typeof node[k] === "number");
+  const curMetric = selMetric.value;
+  if (selMetric.options.length !== keys.length || keys.some((k, i) => selMetric.options[i].value !== k)) {
+    selMetric.textContent = "";
+    keys.forEach(k => { const o = el("option", "", (LABELS[k] || [k])[0]); o.value = k; selMetric.appendChild(o); });
+    if (keys.includes(curMetric)) selMetric.value = curMetric;
+  }
+}
+
+/* ---------- กราฟ (SVG วาดเอง ไม่ใช้ไลบรารี) ---------- */
+const NS = "http://www.w3.org/2000/svg";
+function s(tag, attrs, text) {
+  const e = document.createElementNS(NS, tag);
+  Object.keys(attrs || {}).forEach(k => e.setAttribute(k, attrs[k]));
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function drawChart(points, unit) {
+  const svg = $("chart"); svg.textContent = "";
+  const W = 600, H = 240, L = 48, R = 12, T = 12, B = 28;
+  if (points.length < 2) {
+    svg.appendChild(s("text", { x: W / 2, y: H / 2, "text-anchor": "middle", fill: "var(--mut)", "font-size": 14 }, "ยังมีข้อมูลไม่พอสำหรับวาดกราฟ"));
+    return;
+  }
+  const ts = points.map(p => p.t), vs = points.map(p => p.v);
+  let vmin = Math.min(...vs), vmax = Math.max(...vs);
+  if (vmin === vmax) { vmin -= 1; vmax += 1; }
+  const pad = (vmax - vmin) * 0.1; vmin -= pad; vmax += pad;
+  const tmin = ts[0], tmax = ts[ts.length - 1] || tmin + 1;
+  const X = t => L + (W - L - R) * (t - tmin) / ((tmax - tmin) || 1);
+  const Y = v => T + (H - T - B) * (1 - (v - vmin) / (vmax - vmin));
+  for (let i = 0; i <= 4; i++) {
+    const v = vmin + (vmax - vmin) * i / 4, y = Y(v);
+    svg.appendChild(s("line", { x1: L, x2: W - R, y1: y, y2: y, stroke: "var(--line)", "stroke-width": 1 }));
+    svg.appendChild(s("text", { x: L - 6, y: y + 4, "text-anchor": "end", fill: "var(--mut)", "font-size": 11 }, v.toFixed(1)));
+  }
+  const tl = t => new Date(t * 1000).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  svg.appendChild(s("text", { x: L, y: H - 8, fill: "var(--mut)", "font-size": 11 }, tl(tmin)));
+  svg.appendChild(s("text", { x: W - R, y: H - 8, "text-anchor": "end", fill: "var(--mut)", "font-size": 11 }, tl(tmax)));
+  if (unit) svg.appendChild(s("text", { x: 4, y: 12, fill: "var(--mut)", "font-size": 11 }, unit));
+  svg.appendChild(s("polyline", { points: points.map(p => X(p.t).toFixed(1) + "," + Y(p.v).toFixed(1)).join(" "),
+    fill: "none", stroke: "var(--acc)", "stroke-width": 2, "stroke-linejoin": "round" }));
+  points.forEach(p => svg.appendChild(s("circle", { cx: X(p.t), cy: Y(p.v), r: 2.5, fill: "var(--acc)" })));
+}
+
+async function refreshChart() {
+  const node = $("selNode").value, metric = $("selMetric").value;
+  if (!node || !metric) { drawChart([], ""); return; }
+  const q = 'orderBy=' + encodeURIComponent('"$key"') + '&limitToLast=60';
+  const logs = await dbGet("/telemetry/logs/" + encodeURIComponent(node), q);
+  const pts = Object.values(logs || {})
+    .filter(r => r && typeof r[metric] === "number" && r.ts)
+    .map(r => ({ t: r.ts, v: r[metric] }))
+    .sort((a, b) => a.t - b.t);
+  drawChart(pts, (LABELS[metric] || [0, ""])[1]);
+}
+$("selNode").onchange = () => { syncSelectors(latestCache); refreshChart().catch(showErr); };
+$("selMetric").onchange = () => refreshChart().catch(showErr);
+
+/* ---------- วนดึงข้อมูล ---------- */
+let timer = null, busy = false, tickCount = 0;
+function showErr(e) {
+  if (e && e.fatal) { store.del("rt"); showLogin(); return; }
+  $("foot").textContent = "⚠️ ดึงข้อมูลไม่สำเร็จ: " + (e && e.message ? e.message : e);
+}
+async function tick() {
+  if (busy) return;
+  busy = true;
+  try {
+    const [latest, status, ack] = await Promise.all([
+      dbGet("/telemetry/latest"), dbGet("/status/gateway"), dbGet("/commands/last_ack")]);
+    latestCache = latest || {};
+    renderStatus(status); renderAck(ack); renderNodes(latestCache); syncSelectors(latestCache);
+    if (tickCount % 3 === 0) await refreshChart();      // กราฟอัปเดตทุก ~6 วินาที
+    tickCount++;
+    $("foot").textContent = "อัปเดตล่าสุด " + new Date().toLocaleTimeString("th-TH") + " (ดึงข้อมูลทุก 2 วินาที)";
+  } catch (e) { showErr(e); }
+  finally { busy = false; }
+}
+function startPolling() { stopPolling(); tickCount = 0; tick(); timer = setInterval(tick, 2000); }
+function stopPolling() { if (timer) clearInterval(timer); timer = null; }
+
+/* ---------- เริ่มต้น ---------- */
+(async function boot() {
+  if (!CONFIG.API_KEY || !CONFIG.DB_URL) { $("configErr").hidden = false; return; }
+  if (!store.get("rt")) { showLogin(); return; }
+  try { await refreshToken(); showMain(); }
+  catch (e) { if (e.fatal) { store.del("rt"); showLogin(); } else { showMain(); } }
+})();
+</script>
+</body>
+</html>
