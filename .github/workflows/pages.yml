@@ -22,7 +22,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Inject config
         env:
@@ -30,13 +30,17 @@ jobs:
           DB_URL: ${{ secrets.FIREBASE_DB_URL }}
           EMAIL: ${{ secrets.FIREBASE_EMAIL }}
         run: |
-          sed -i "s|__API_KEY__|$API_KEY|g; s|__DB_URL__|$DB_URL|g; s|__EMAIL__|$EMAIL|g" docs/index.html docs/dashboard.html
+          for f in docs/index.html docs/dashboard.html; do
+            if [ -f "$f" ]; then
+              sed -i "s|__API_KEY__|$API_KEY|g; s|__DB_URL__|$DB_URL|g; s|__EMAIL__|$EMAIL|g" "$f"
+            fi
+          done
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v4
+        uses: actions/upload-pages-artifact@v3
         with:
           path: docs
 
