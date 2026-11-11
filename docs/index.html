@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Voice Control</title>
+<style>
+  :root { --bg:#f6f6f4; --fg:#1d1d1b; --card:#fff; --line:#d8d8d2; --mut:#6b6b64; --ok:#1a7f4b; --bad:#c62828; --acc:#2456d6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#161616; --fg:#eeeeea; --card:#222; --line:#3a3a36; --mut:#9a9a92; --ok:#4cc38a; --bad:#ff6b6b; --acc:#7da2ff; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:16px; font-family:system-ui,"Noto Sans Thai",sans-serif; background:var(--bg); color:var(--fg); }
+  main { max-width:480px; margin:0 auto; }
+  h1 { font-size:20px; margin:0 0 12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
+  label { display:block; font-size:13px; color:var(--mut); margin:8px 0 4px; }
+  input, select { width:100%; padding:10px; font-size:16px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); }
+  button { font-size:16px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--fg); cursor:pointer; }
+  button.primary { background:var(--acc); color:#fff; border-color:var(--acc); width:100%; margin-top:12px; }
+  #mic { width:100%; height:96px; font-size:20px; font-weight:600; }
+  #mic.on { background:var(--bad); color:#fff; border-color:var(--bad); }
+  #stop { width:100%; height:72px; font-size:24px; font-weight:700; background:var(--bad); color:#fff; border-color:var(--bad); margin-top:10px; }
+  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:10px; }
+  #heard { min-height:48px; font-size:20px; }
+  #state { font-size:14px; color:var(--mut); margin-top:6px; }
+  .ok { color:var(--ok); } .bad { color:var(--bad); }
+  ul { list-style:none; padding:0; margin:0; font-size:14px; }
+  li { padding:6px 0; border-bottom:1px solid var(--line); }
+  .row { display:flex; gap:8px; align-items:center; margin-top:10px; font-size:14px; }
+  .row input { width:auto; }
+  details summary { cursor:pointer; color:var(--mut); font-size:14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🎙️ สั่งหุ่นด้วยเสียง</h1>
+
+  <!-- ===== ตั้งค่า + ล็อกอิน ===== -->
+  <section class="card" id="loginCard">
+    <details id="setup">
+      <summary>ตั้งค่า Firebase (ทำครั้งเดียว)</summary>
+      <label>Web API Key</label><input id="apiKey" autocomplete="off">
+      <label>Database URL</label><input id="dbUrl" placeholder="https://xxxx-default-rtdb....firebasedatabase.app" autocomplete="off">
+    </details>
+    <label>อีเมล</label><input id="email" type="email" autocomplete="username">
+    <label>รหัสผ่าน (ไม่ถูกบันทึกไว้ในเครื่อง)</label><input id="pass" type="password" autocomplete="current-password">
+    <button class="primary" id="loginBtn">เข้าสู่ระบบ</button>
+    <div id="loginMsg" class="bad" style="margin-top:8px;font-size:14px"></div>
+  </section>
+
+  <!-- ===== หน้าควบคุม ===== -->
+  <section id="mainCard" hidden>
+    <div class="card">
+      <label>ภาษา</label>
+      <select id="lang"><option value="th-TH">ไทย</option><option value="en-US">English</option></select>
+      <button id="mic" style="margin-top:12px">แตะเพื่อพูด</button>
+      <div class="row"><input type="checkbox" id="cont"><label for="cont" style="margin:0">ฟังต่อเนื่อง (เปิดไมค์ค้างไว้)</label></div>
+      <div id="heard" style="margin-top:12px">—</div>
+      <div id="state"></div>
+    </div>
+
+    <button id="stop">⛔ หยุด (STOP)</button>
+
+    <div class="card" style="margin-top:12px">
+      <div style="font-size:13px;color:var(--mut)">ปุ่มสำรอง (ถ้าไมค์ใช้ไม่ได้)</div>
+      <div class="grid" id="manual"></div>
+    </div>
+
+    <div class="card">
+      <div style="font-size:13px;color:var(--mut);margin-bottom:6px">คำสั่งที่ส่งล่าสุด</div>
+      <ul id="log"></ul>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ---------- ตั้งค่าและ helper ---------- */
+const $ = id => document.getElementById(id);
+const store = {
+  get(k){ try { return localStorage.getItem(k) || ""; } catch(e){ return ""; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
+};
+
+// เปิดลิงก์แบบ index.html?k=API_KEY&d=DB_URL ครั้งเดียว เพื่อกรอกค่าให้อัตโนมัติ (แล้วลบออกจาก URL)
+(function readQuery(){
+  const q = new URLSearchParams(location.search);
+  if (q.get("k")) store.set("apiKey", q.get("k"));
+  if (q.get("d")) store.set("dbUrl", q.get("d"));
+  if (q.has("k") || q.has("d")) history.replaceState(null, "", location.pathname);
+})();
+// ===== ใส่ค่าตรงนี้ได้เลย (ระหว่างเครื่องหมาย " ") แล้วไม่ต้องตั้งค่าบนมือถือ =====
+// ห้ามใส่รหัสผ่านลงในไฟล์นี้ เพราะหน้านี้เป็นสาธารณะ ใครเปิดก็เห็น
+const DEFAULT_API_KEY = "AIzaSyDXgAvKforpZ-46SbJi4nT3ecjcoHBhOVc";   // Web API Key จาก Firebase
+const DEFAULT_DB_URL  = "gtest@gmail.com";   // เช่น https://xxxx-default-rtdb.asia-southeast1.firebasedatabase.app
+const DEFAULT_EMAIL   = "123456";   // อีเมลของ user ใน Firebase (ไม่ใส่ก็ได้)
+// =====================================================================
+$("apiKey").value = DEFAULT_API_KEY || store.get("apiKey");
+$("dbUrl").value  = DEFAULT_DB_URL  || store.get("dbUrl");
+$("email").value  = DEFAULT_EMAIL   || store.get("email");
+if (!$("apiKey").value || !$("dbUrl").value) $("setup").open = true;
+
+/* ---------- แปลงข้อความเป็นคำสั่ง ---------- */
+// ลำดับสำคัญ: "stop" อยู่บนสุดเพื่อให้คำสั่งหยุดถูกจับก่อนเสมอ
+const COMMANDS = [
+  { action:"stop",     label:"หยุด",      words:["หยุด","stop","halt"] },
+  { action:"forward",  label:"เดินหน้า",   words:["เดินหน้า","ไปข้างหน้า","ข้างหน้า","ตรงไป","forward","ahead"] },
+  { action:"backward", label:"ถอยหลัง",    words:["ถอยหลัง","ถอย","backward","back","reverse"] },
+  { action:"left",     label:"เลี้ยวซ้าย",  words:["เลี้ยวซ้าย","ซ้าย","left"] },
+  { action:"right",    label:"เลี้ยวขวา",   words:["เลี้ยวขวา","ขวา","right"] },
+  { action:"arm_up",   label:"ยกแขน",     words:["ยกแขน","แขนขึ้น","ยกขึ้น","armup","raise"] },
+  { action:"arm_down", label:"ลดแขน",     words:["ลดแขน","แขนลง","ลดลง","armdown","lower"] },
+  { action:"grip",     label:"หยิบ",       words:["หยิบ","จับ","คีบ","grip","grab","pick"] },
+  { action:"release",  label:"ปล่อย",      words:["ปล่อย","วาง","release","drop"] },
+];
+//BEGIN_PARSE
+function parseCommand(text) {
+  const t = text.toLowerCase().replace(/\s+/g, "");   // ภาษาไทยไม่มีเว้นวรรค จึงตัดช่องว่างทิ้งเพื่อเทียบ
+  for (const c of COMMANDS) {
+    if (c.words.some(w => t.includes(w))) return c.action;
+  }
+  return null;
+}
+//END_PARSE
+
+/* ---------- Firebase (REST) ---------- */
+let idToken = "", tokenExp = 0, creds = null;
+
+async function login() {
+  const r = await fetch(
+    "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + encodeURIComponent($("apiKey").value.trim()),
+    { method:"POST", headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ email:creds.email, password:creds.password, returnSecureToken:true }) });
+  const j = await r.json();
+  if (!r.ok) throw new Error((j.error && j.error.message) || ("HTTP " + r.status));
+  idToken = j.idToken;
+  tokenExp = Date.now() + 50*60*1000;     // token อายุ 1 ชม. ต่ออายุก่อนหมด
+}
+
+async function db(method, path, body) {
+  if (!idToken || Date.now() > tokenExp) await login();
+  const base = $("dbUrl").value.trim().replace(/\/+$/, "");
+  const r = await fetch(base + path + ".json?auth=" + encodeURIComponent(idToken),
+    { method, headers:{ "Content-Type":"application/json" }, body: body ? JSON.stringify(body) : undefined });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+
+$("loginBtn").onclick = async () => {
+  $("loginMsg").textContent = "";
+  creds = { email:$("email").value.trim(), password:$("pass").value };
+  try {
+    await login();
+    store.set("apiKey", $("apiKey").value.trim()); store.set("dbUrl", $("dbUrl").value.trim()); store.set("email", creds.email);
+    $("pass").value = "";
+    $("loginCard").hidden = true; $("mainCard").hidden = false;
+  } catch (e) { $("loginMsg").textContent = "ล็อกอินไม่สำเร็จ: " + e.message; }
+};
+
+/* ---------- ส่งคำสั่ง ---------- */
+let lastAction = "", lastAt = 0;
+async function sendCommand(action, text, source) {
+  const now = Date.now();
+  if (action !== "stop" && action === lastAction && now - lastAt < 800) return;   // กันส่งซ้ำรัวๆ (stop ส่งได้เสมอ)
+  lastAction = action; lastAt = now;
+  const t0 = performance.now();
+  try {
+    await db("POST", "/commands/pending", { action, text: text || "", source, ts: Math.floor(now/1000) });
+    addLog(`✅ ${action}  (${Math.round(performance.now()-t0)} ms)  ${text ? "“"+text+"”" : ""}`);
+    $("state").innerHTML = `<span class="ok">ส่งแล้ว: ${action}</span>`;
+  } catch (e) {
+    addLog(`❌ ${action} ส่งไม่สำเร็จ: ${e.message}`);
+    $("state").innerHTML = `<span class="bad">ส่งไม่สำเร็จ: ${e.message}</span>`;
+  }
+}
+function addLog(s) {
+  const li = document.createElement("li");
+  li.textContent = new Date().toLocaleTimeString("th-TH") + "  " + s;
+  $("log").prepend(li);
+  while ($("log").children.length > 10) $("log").lastChild.remove();
+}
+
+/* ---------- ปุ่มสำรอง + STOP ---------- */
+COMMANDS.filter(c => c.action !== "stop").forEach(c => {
+  const b = document.createElement("button");
+  b.textContent = c.label;
+  b.onclick = () => sendCommand(c.action, "", "button");
+  $("manual").appendChild(b);
+});
+$("stop").onclick = () => sendCommand("stop", "", "button");
+
+/* ---------- ไมโครโฟน (Web Speech API) ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, listening = false, keepGoing = false;
+
+function setMic() {
+  $("mic").classList.toggle("on", listening);
+  $("mic").textContent = listening ? "🔴 กำลังฟัง… (แตะเพื่อหยุด)" : "แตะเพื่อพูด";
+}
+
+function startListen() {
+  if (!SR) { $("state").innerHTML = '<span class="bad">เบราว์เซอร์นี้ไม่รองรับ ให้ใช้ Chrome บน Android</span>'; return; }
+  rec = new SR();
+  rec.lang = $("lang").value;
+  rec.interimResults = true;
+  rec.continuous = false;
+  rec.maxAlternatives = 1;
+  rec.onresult = e => {
+    let interim = "", final = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i];
+      if (r.isFinal) final += r[0].transcript; else interim += r[0].transcript;
+    }
+    $("heard").textContent = final || interim || "—";
+    if (final) handleFinal(final.trim());
+  };
+  rec.onerror = e => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      keepGoing = false;
+      $("state").innerHTML = '<span class="bad">ไม่ได้รับอนุญาตใช้ไมค์ (ตรวจสอบสิทธิ์ของเบราว์เซอร์ และต้องเปิดผ่าน https)</span>';
+    } else if (e.error !== "no-speech" && e.error !== "aborted") {
+      $("state").innerHTML = `<span class="bad">ข้อผิดพลาดของไมค์: ${e.error}</span>`;
+    }
+  };
+  rec.onend = () => {
+    listening = false; setMic();
+    if (keepGoing) setTimeout(startListen, 200);
+  };
+  try { rec.start(); listening = true; setMic(); } catch (e) { /* กำลังเริ่มอยู่แล้ว */ }
+}
+
+function handleFinal(text) {
+  const action = parseCommand(text);
+  if (action) sendCommand(action, text, "voice");
+  else $("state").innerHTML = `<span class="bad">ไม่เข้าใจคำสั่ง: “${text}”</span>`;
+}
+
+$("mic").onclick = () => {
+  if (listening) { keepGoing = false; if (rec) rec.stop(); }
+  else { keepGoing = $("cont").checked; startListen(); }
+};
+$("cont").onchange = () => { if (!$("cont").checked) keepGoing = false; };
+</script>
+</body>
+</html>
