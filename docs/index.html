@@ -3,84 +3,464 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Voice Control</title>
+<title>Operator Console — Robot Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#f6f6f4; --fg:#1d1d1b; --card:#fff; --line:#d8d8d2; --mut:#6b6b64; --ok:#1a7f4b; --bad:#c62828; --acc:#2456d6; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#161616; --fg:#eeeeea; --card:#222; --line:#3a3a36; --mut:#9a9a92; --ok:#4cc38a; --bad:#ff6b6b; --acc:#7da2ff; }
+  :root {
+    --bg: #f4f4f5;
+    --surface: #ffffff;
+    --surface-sub: #f8fafc;
+    --border: #e4e4e7;
+    --border-strong: #d4d4d8;
+    --fg: #09090b;
+    --mut: #71717a;
+    --acc: #2563eb;
+    --acc-hover: #1d4ed8;
+    --ok: #10b981;
+    --ok-bg: rgba(16, 185, 129, 0.1);
+    --warn: #f59e0b;
+    --warn-bg: rgba(245, 158, 11, 0.1);
+    --bad: #ef4444;
+    --bad-bg: rgba(239, 68, 68, 0.1);
+    --radius: 8px;
+    --font-sans: "IBM Plex Sans Thai", -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
   }
-  * { box-sizing:border-box; }
-  body { margin:0; padding:16px; font-family:system-ui,"Noto Sans Thai",sans-serif; background:var(--bg); color:var(--fg); }
-  main { max-width:480px; margin:0 auto; }
-  h1 { font-size:20px; margin:0 0 12px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
-  label { display:block; font-size:13px; color:var(--mut); margin:8px 0 4px; }
-  input, select { width:100%; padding:10px; font-size:16px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); }
-  button { font-size:16px; padding:12px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--fg); cursor:pointer; }
-  button.primary { background:var(--acc); color:#fff; border-color:var(--acc); width:100%; margin-top:12px; }
-  #mic { width:100%; height:96px; font-size:20px; font-weight:600; }
-  #mic.on { background:var(--bad); color:#fff; border-color:var(--bad); }
-  #stop { width:100%; height:72px; font-size:24px; font-weight:700; background:var(--bad); color:#fff; border-color:var(--bad); margin-top:10px; }
-  .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:10px; }
-  #heard { min-height:48px; font-size:20px; }
-  #state { font-size:14px; color:var(--mut); margin-top:6px; }
-  .ok { color:var(--ok); } .bad { color:var(--bad); }
-  ul { list-style:none; padding:0; margin:0; font-size:14px; }
-  li { padding:6px 0; border-bottom:1px solid var(--line); }
-  .row { display:flex; gap:8px; align-items:center; margin-top:10px; font-size:14px; }
-  .row input { width:auto; }
-  .link { background:none; border:none; color:var(--mut); font-size:13px; text-decoration:underline; padding:8px 0; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #09090b;
+      --surface: #121215;
+      --surface-sub: #18181c;
+      --border: #27272a;
+      --border-strong: #3f3f46;
+      --fg: #fafafa;
+      --mut: #a1a1aa;
+      --acc: #3b82f6;
+      --acc-hover: #60a5fa;
+      --ok: #34d399;
+      --ok-bg: rgba(52, 211, 153, 0.12);
+      --warn: #fbbf24;
+      --warn-bg: rgba(251, 191, 36, 0.12);
+      --bad: #f87171;
+      --bad-bg: rgba(248, 113, 113, 0.12);
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    padding: 0 0 40px;
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Top Navigation Bar */
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .topbar-inner {
+    max-width: 540px;
+    margin: 0 auto;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+  }
+  .brand-mark {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--acc);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  }
+  .nav-tabs {
+    display: flex;
+    background: var(--surface-sub);
+    padding: 3px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  .nav-tabs a {
+    text-decoration: none;
+    color: var(--mut);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+  }
+  .nav-tabs a.active {
+    background: var(--surface);
+    color: var(--fg);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  main { max-width: 540px; margin: 16px auto 0; padding: 0 16px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--mut);
+  }
+
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--mut);
+    margin: 10px 0 4px;
+  }
+  input, select {
+    width: 100%;
+    padding: 9px 12px;
+    font-size: 14px;
+    font-family: var(--font-sans);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface-sub);
+    color: var(--fg);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  input:focus, select:focus { border-color: var(--acc); }
+
+  button {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 600;
+    padding: 10px 14px;
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--fg);
+    cursor: pointer;
+    transition: all 0.12s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  button:hover { background: var(--surface-sub); border-color: var(--mut); }
+  button:active { transform: translateY(1px); }
+  button.primary {
+    background: var(--fg);
+    color: var(--bg);
+    border-color: var(--fg);
+    width: 100%;
+    margin-top: 16px;
+    padding: 11px;
+  }
+  button.primary:hover { opacity: 0.9; }
+
+  /* Voice Module */
+  .voice-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .voice-toolbar select {
+    width: auto;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+  }
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--mut);
+    cursor: pointer;
+    user-select: none;
+  }
+  .toggle-wrap input { width: 15px; height: 15px; margin: 0; accent-color: var(--acc); cursor: pointer; }
+
+  #mic {
+    width: 100%;
+    height: 88px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: var(--radius);
+    background: var(--surface-sub);
+    border: 1px solid var(--border-strong);
+    position: relative;
+    overflow: hidden;
+  }
+  .mic-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--mut);
+    transition: all 0.2s;
+  }
+  #mic.on {
+    background: var(--bad-bg);
+    color: var(--bad);
+    border-color: var(--bad);
+  }
+  #mic.on .mic-dot {
+    background: var(--bad);
+    box-shadow: 0 0 0 5px rgba(239, 68, 68, 0.25);
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.55; transform: scale(1.25); }
+  }
+
+  /* Transcript Display */
+  .transcript-box {
+    margin-top: 12px;
+    padding: 12px;
+    border-radius: 6px;
+    background: var(--surface-sub);
+    border: 1px solid var(--border);
+  }
+  .transcript-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--mut);
+    margin-bottom: 4px;
+  }
+  #heard {
+    min-height: 28px;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    word-break: break-word;
+  }
+  #state {
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--mut);
+    margin-top: 6px;
+    min-height: 18px;
+  }
+
+  /* Emergency Stop & Diagnostics */
+  .action-bar {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  #stop {
+    width: 100%;
+    height: 60px;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: var(--bad);
+    color: #ffffff;
+    border: 1px solid var(--bad);
+    border-radius: var(--radius);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
+  }
+  #stop:hover { opacity: 0.92; }
+
+  /* Tactile Manual Controls */
+  #manual {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  #manual button {
+    height: 52px;
+    font-size: 13px;
+    font-weight: 600;
+    background: var(--surface-sub);
+    border: 1px solid var(--border-strong);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px;
+  }
+  #manual button:hover {
+    border-color: var(--acc);
+    color: var(--acc);
+    background: var(--surface);
+  }
+  /* จัดตำแหน่งปุ่มด้วยลำดับจาก COMMANDS โดยไม่ต้องแก้ JS เดิม */
+  #manual button:nth-child(1) { grid-column: 2 / 4; background: var(--surface); border-width: 1.5px; } /* เดินหน้า */
+  #manual button:nth-child(3) { grid-column: 1 / 3; } /* เลี้ยวซ้าย */
+  #manual button:nth-child(4) { grid-column: 3 / 5; } /* เลี้ยวขวา */
+  #manual button:nth-child(2) { grid-column: 2 / 4; } /* ถอยหลัง */
+  #manual button:nth-child(5),
+  #manual button:nth-child(6),
+  #manual button:nth-child(7),
+  #manual button:nth-child(8) {
+    margin-top: 6px;
+  }
+
+  /* Telemetry Command Log */
+  ul#log {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    max-height: 210px;
+    overflow-y: auto;
+  }
+  ul#log li {
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--fg);
+  }
+  ul#log li:last-child { border-bottom: none; }
+  ul#log:empty::before {
+    content: "Waiting for operator input...";
+    color: var(--mut);
+    font-style: italic;
+  }
+
+  .ok { color: var(--ok); }
+  .bad { color: var(--bad); }
+
+  .footer-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 8px;
+  }
+  .link {
+    background: none;
+    border: none;
+    color: var(--mut);
+    font-size: 12px;
+    padding: 4px 0;
+    text-decoration: underline;
+  }
+  .link:hover { color: var(--fg); background: none; }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <div>
-      <span id="gwBadge" class="badge">—</span>
-      <a href="./dashboard.html" style="font-size:13px;margin-left:8px">หน้าควบคุม</a>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark"></span>
+      <span>ROBOTICS CONSOLE</span>
+      <span id="gwBadge" hidden>—</span>
     </div>
-  </header>
+    <nav class="nav-tabs">
+      <a href="./index.html" class="active">สั่งงาน</a>
+      <a href="./dashboard.html">แดชบอร์ด</a>
+    </nav>
+  </div>
+</header>
 
-  <h1>🎙️ สั่งหุ่นด้วยเสียง</h1>
-
+<main>
   <!-- ขึ้นเฉพาะตอนยังไม่ได้ใส่ค่าในโค้ด -->
   <section class="card" id="configErr" hidden>
-    <div class="bad">ยังไม่ได้ใส่ API_KEY หรือ DB_URL ในโค้ด<br>เปิดไฟล์ index.html แล้วแก้ที่บล็อก CONFIG ด้านบนของ &lt;script&gt;</div>
+    <div class="bad" style="font-size:13px;font-weight:500;">ยังไม่ได้ตั้งค่า API_KEY หรือ DB_URL ในโค้ด<br>เปิดไฟล์ index.html แล้วแก้ไขที่บล็อก CONFIG ด้านบนของ &lt;script&gt;</div>
   </section>
 
   <!-- ล็อกอิน: ขึ้นครั้งแรกครั้งเดียวต่อเครื่อง หลังจากนั้นเข้าหน้าควบคุมเลย -->
   <section class="card" id="loginCard" hidden>
-    <label>อีเมล</label><input id="email" type="email" autocomplete="username">
-    <label>รหัสผ่าน</label><input id="pass" type="password" autocomplete="current-password">
-    <button class="primary" id="loginBtn">เข้าสู่ระบบ</button>
-    <div id="loginMsg" class="bad" style="margin-top:8px;font-size:14px"></div>
+    <div class="section-head">
+      <span class="section-label">Authentication</span>
+    </div>
+    <label for="email">อีเมลผู้ดูแลระบบ</label>
+    <input id="email" type="email" autocomplete="username" placeholder="operator@example.com">
+    <label for="pass">รหัสผ่าน</label>
+    <input id="pass" type="password" autocomplete="current-password" placeholder="••••••••">
+    <button class="primary" id="loginBtn">เข้าสู่ระบบควบคุม</button>
+    <div id="loginMsg" class="bad" style="margin-top:10px;font-size:13px"></div>
   </section>
 
   <!-- หน้าควบคุม -->
   <section id="mainCard" hidden>
     <div class="card">
-      <label>ภาษา</label>
-      <select id="lang"><option value="th-TH">ไทย</option><option value="en-US">English</option></select>
-      <button id="mic" style="margin-top:12px">แตะเพื่อพูด</button>
-      <div class="row"><input type="checkbox" id="cont"><label for="cont" style="margin:0">ฟังต่อเนื่อง (เปิดไมค์ค้างไว้)</label></div>
-      <div id="heard" style="margin-top:12px">—</div>
-      <div id="state"></div>
+      <div class="voice-toolbar">
+        <span class="section-label">Voice Recognition</span>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <label class="toggle-wrap" for="cont" style="margin:0;">
+            <input type="checkbox" id="cont">
+            <span>ฟังต่อเนื่อง</span>
+          </label>
+          <select id="lang" aria-label="เลือกภาษา">
+            <option value="th-TH">TH (ไทย)</option>
+            <option value="en-US">EN (US)</option>
+          </select>
+        </div>
+      </div>
+
+      <button id="mic">
+        <span class="mic-dot"></span>
+        <span id="micLabel">แตะเพื่อพูดคำสั่ง</span>
+      </button>
+
+      <div class="transcript-box">
+        <div class="transcript-meta">Captured Audio Stream</div>
+        <div id="heard">—</div>
+        <div id="state">พร้อมรับคำสั่งเสียง</div>
+      </div>
     </div>
 
-    <button id="stop">⛔ หยุด (STOP)</button>
-    <button id="ping" style="width:100%;margin-top:10px">🔌 ทดสอบเชื่อมต่อ Cloud</button>
-    <div id="pingMsg" style="font-size:14px;margin-top:6px"></div>
-
-    <div class="card" style="margin-top:12px">
-      <div style="font-size:13px;color:var(--mut)">ปุ่มสำรอง (ถ้าไมค์ใช้ไม่ได้)</div>
-      <div class="grid" id="manual"></div>
+    <div class="action-bar">
+      <button id="stop">EMERGENCY STOP (หยุดฉุกเฉิน)</button>
     </div>
 
     <div class="card">
-      <div style="font-size:13px;color:var(--mut);margin-bottom:6px">คำสั่งที่ส่งล่าสุด</div>
+      <div class="section-head">
+        <span class="section-label">Tactile Override (Drive &amp; Arm)</span>
+      </div>
+      <div id="manual"></div>
+    </div>
+
+    <div class="card">
+      <div class="section-head">
+        <span class="section-label">Transmission Log</span>
+        <button id="ping" style="padding:4px 10px;font-size:12px;font-family:var(--font-mono);">Ping Firebase</button>
+      </div>
+      <div id="pingMsg" style="font-size:12px;font-family:var(--font-mono);margin-bottom:8px;"></div>
       <ul id="log"></ul>
     </div>
-    <button class="link" id="logout">ออกจากระบบ (เปลี่ยนบัญชี)</button>
+
+    <div class="footer-bar">
+      <span style="font-size:11px;font-family:var(--font-mono);color:var(--mut);">DIRECT RTDB STREAM</span>
+      <button class="link" id="logout">ออกจากระบบ (เปลี่ยนบัญชี)</button>
+    </div>
   </section>
 </main>
 
@@ -198,10 +578,10 @@ async function sendCommand(action, text, source) {
   const t0 = performance.now();
   try {
     await db("POST", "/commands/pending", { action, text: text || "", source, ts: Math.floor(now/1000) });
-    addLog(`✅ ${action}  (${Math.round(performance.now()-t0)} ms)  ${text ? "“"+text+"”" : ""}`);
-    $("state").innerHTML = `<span class="ok">ส่งแล้ว: ${action}</span>`;
+    addLog(`[OK] ${action} (${Math.round(performance.now()-t0)} ms) ${text ? "“"+text+"”" : ""}`);
+    $("state").innerHTML = `<span class="ok">ส่งคำสั่งสำเร็จ: ${action}</span>`;
   } catch (e) {
-    addLog(`❌ ${action} ส่งไม่สำเร็จ: ${e.message}`);
+    addLog(`[ERR] ${action} ส่งไม่สำเร็จ: ${e.message}`);
     $("state").innerHTML = `<span class="bad">ส่งไม่สำเร็จ: ${e.message}</span>`;
     if (e.fatal) showLogin();     // refresh token ใช้ไม่ได้แล้ว -> ให้ล็อกอินใหม่
   }
@@ -216,15 +596,15 @@ function addLog(s) {
 /* ---------- ทดสอบ Cloud: เขียนแล้วอ่านกลับ ---------- */
 $("ping").onclick = async () => {
   const el = $("pingMsg");
-  el.className = ""; el.textContent = "กำลังทดสอบ…";
+  el.className = ""; el.textContent = "กำลังทดสอบการเชื่อมต่อ…";
   const t0 = performance.now(), stamp = Date.now();
   try {
     await db("PUT", "/debug/phone_ping", { ts: stamp });
     const back = await db("GET", "/debug/phone_ping");
     const ms = Math.round(performance.now() - t0);
-    if (back && back.ts === stamp) { el.className = "ok"; el.textContent = `✅ เขียนและอ่านกลับจาก Firebase ได้ (${ms} ms)`; }
-    else { el.className = "bad"; el.textContent = "⚠️ เขียนได้แต่อ่านกลับมาไม่ตรง"; }
-  } catch (e) { el.className = "bad"; el.textContent = "❌ ติดต่อ Firebase ไม่ได้: " + e.message; }
+    if (back && back.ts === stamp) { el.className = "ok"; el.textContent = `เชื่อมต่อ Firebase ปกติ (RTT ${ms} ms)`; }
+    else { el.className = "bad"; el.textContent = "เขียนข้อมูลได้แต่อ่านค่ากลับไม่ตรงกัน"; }
+  } catch (e) { el.className = "bad"; el.textContent = "ติดต่อ Firebase ไม่ได้: " + e.message; }
 };
 
 /* ---------- ปุ่มสำรอง + STOP ---------- */
@@ -242,11 +622,11 @@ let rec = null, listening = false, keepGoing = false, gotResult = false;
 
 function setMic() {
   $("mic").classList.toggle("on", listening);
-  $("mic").textContent = listening ? "🔴 กำลังฟัง… (แตะเพื่อหยุด)" : "แตะเพื่อพูด";
+  $("micLabel").textContent = listening ? "กำลังฟังเสียง… (แตะเพื่อหยุด)" : "แตะเพื่อพูดคำสั่ง";
 }
 
 function startListen() {
-  if (!SR) { $("state").innerHTML = '<span class="bad">เบราว์เซอร์นี้ไม่รองรับ ให้ใช้ Chrome บน Android</span>'; return; }
+  if (!SR) { $("state").innerHTML = '<span class="bad">เบราว์เซอร์นี้ไม่รองรับ Web Speech API (แนะนำ Chrome)</span>'; return; }
   rec = new SR();
   rec.lang = $("lang").value;
   rec.interimResults = true;
@@ -254,7 +634,7 @@ function startListen() {
   rec.maxAlternatives = 1;
   gotResult = false;
   let lastText = "", handled = false;     // กันกรณี Android ไม่ส่งสถานะ "final" มาให้
-  rec.onstart = () => { $("state").textContent = "กำลังฟัง… พูดได้เลย"; };
+  rec.onstart = () => { $("state").textContent = "กำลังฟัง… พูดคำสั่งได้เลย"; };
   rec.onresult = e => {
     gotResult = true;
     let interim = "", final = "";
@@ -269,12 +649,12 @@ function startListen() {
   };
   rec.onerror = e => {
     const msg = {
-      "not-allowed": "ไม่ได้รับอนุญาตใช้ไมค์ (ตรวจสิทธิ์ของเบราว์เซอร์ และต้องเปิดผ่าน https)",
+      "not-allowed": "ไม่ได้รับอนุญาตใช้ไมค์ (ตรวจสอบสิทธิ์เบราว์เซอร์และ HTTPS)",
       "service-not-allowed": "ไม่ได้รับอนุญาตใช้บริการรู้จำเสียง",
-      "no-speech": "ไม่ได้ยินเสียงพูด ลองพูดใกล้ไมค์และดังขึ้น",
-      "audio-capture": "ไม่พบไมโครโฟน",
-      "network": "รู้จำเสียงใช้ไม่ได้เพราะเน็ตมีปัญหา",
-      "language-not-supported": "ไม่รองรับภาษานี้",
+      "no-speech": "ไม่ได้ยินเสียงพูด ลองพูดใกล้ไมค์และชัดเจนขึ้น",
+      "audio-capture": "ไม่พบอุปกรณ์ไมโครโฟน",
+      "network": "ระบบรู้จำเสียงขัดข้องจากเครือข่าย",
+      "language-not-supported": "ไม่รองรับภาษาที่เลือก",
     }[e.error] || ("ข้อผิดพลาดของไมค์: " + e.error);
     if (e.error === "not-allowed" || e.error === "service-not-allowed") keepGoing = false;
     if (e.error !== "aborted") $("state").innerHTML = `<span class="bad">${msg}</span>`;
@@ -282,7 +662,7 @@ function startListen() {
   rec.onend = () => {
     listening = false; setMic();
     if (!handled && lastText) { handled = true; handleFinal(lastText); }   // จบการฟังแล้ว ใช้ข้อความล่าสุดที่ได้ยิน
-    else if (!gotResult && !keepGoing && !$("state").textContent.includes("ไม่")) $("state").innerHTML = '<span class="bad">จบการฟังโดยไม่ได้ข้อความ ลองใหม่</span>';
+    else if (!gotResult && !keepGoing && !$("state").textContent.includes("ไม่")) $("state").innerHTML = '<span class="bad">จบการฟังโดยไม่ได้ข้อความ ลองใหม่อีกครั้ง</span>';
     if (keepGoing) setTimeout(startListen, 200);
   };
   try { rec.start(); listening = true; setMic(); } catch (e) { /* กำลังเริ่มอยู่แล้ว */ }
@@ -292,8 +672,8 @@ function handleFinal(text) {
   const action = parseCommand(text);
   if (action) { $("state").textContent = `จับคำสั่งได้: ${action} กำลังส่ง…`; sendCommand(action, text, "voice"); }
   else {
-    $("state").innerHTML = `<span class="bad">ไม่เข้าใจคำสั่ง: “${text}”</span>`;
-    addLog(`❓ ได้ยินว่า “${text}” แต่ไม่ตรงกับคำสั่งใด (ยังไม่ส่ง)`);
+    $("state").innerHTML = `<span class="bad">ไม่ตรงกับคำสั่งในระบบ: “${text}”</span>`;
+    addLog(`[SKIP] ได้ยินว่า “${text}” แต่ไม่ตรงกับคำสั่งใด`);
   }
 }
 
@@ -312,7 +692,7 @@ $("cont").onchange = () => { if (!$("cont").checked) keepGoing = false; };
     showMain();
   } catch (e) {
     if (e.fatal) { store.del("rt"); showLogin(); }
-    else { showMain(); $("state").innerHTML = '<span class="bad">ต่อเน็ตไม่ได้ในตอนนี้ จะลองใหม่ตอนส่งคำสั่ง</span>'; }
+    else { showMain(); $("state").innerHTML = '<span class="bad">เชื่อมต่อเครือข่ายไม่ได้ในขณะนี้ จะลองใหม่อัตโนมัติเมื่อส่งคำสั่ง</span>'; }
   }
 })();
 </script>

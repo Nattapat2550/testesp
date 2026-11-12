@@ -3,79 +3,365 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Robot Dashboard</title>
+<title>Telemetry Dashboard — Robot Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#f6f6f4; --fg:#1d1d1b; --card:#fff; --line:#d8d8d2; --mut:#6b6b64; --ok:#1a7f4b; --warn:#b26a00; --bad:#c62828; --acc:#2456d6; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg:#161616; --fg:#eeeeea; --card:#222; --line:#3a3a36; --mut:#9a9a92; --ok:#4cc38a; --warn:#f0b24a; --bad:#ff6b6b; --acc:#7da2ff; }
+  :root {
+    --bg: #f4f4f5;
+    --fg: #09090b;
+    --card: #ffffff;
+    --surface-sub: #f8fafc;
+    --line: #e4e4e7;
+    --line-strong: #d4d4d8;
+    --mut: #71717a;
+    --ok: #10b981;
+    --ok-bg: rgba(16, 185, 129, 0.1);
+    --warn: #f59e0b;
+    --warn-bg: rgba(245, 158, 11, 0.1);
+    --bad: #ef4444;
+    --bad-bg: rgba(239, 68, 68, 0.1);
+    --acc: #2563eb;
+    --radius: 8px;
+    --font-sans: "IBM Plex Sans Thai", -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
   }
-  * { box-sizing:border-box; }
-  body { margin:0; padding:16px; font-family:system-ui,"Noto Sans Thai",sans-serif; background:var(--bg); color:var(--fg); }
-  main { max-width:960px; margin:0 auto; }
-  header { display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px; }
-  h1 { font-size:20px; margin:0; }
-  h2 { font-size:14px; margin:0 0 8px; color:var(--mut); font-weight:600; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; margin-bottom:12px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; }
-  .row { display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid var(--line); font-size:15px; }
-  .row:last-child { border-bottom:none; }
-  .row span:first-child { color:var(--mut); }
-  .badge { font-size:12px; padding:2px 8px; border-radius:999px; border:1px solid currentColor; white-space:nowrap; }
-  .ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); }
-  .banner { padding:10px 14px; border-radius:10px; margin-bottom:10px; font-weight:600; border:1px solid currentColor; }
-  .title { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-weight:600; }
-  label { font-size:13px; color:var(--mut); display:block; margin:8px 0 4px; }
-  input, select { width:100%; padding:10px; font-size:16px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); }
-  button { font-size:15px; padding:10px 14px; border:1px solid var(--line); border-radius:10px; background:var(--card); color:var(--fg); cursor:pointer; }
-  button.primary { background:var(--acc); color:#fff; border-color:var(--acc); width:100%; margin-top:12px; }
-  .link { background:none; border:none; color:var(--mut); text-decoration:underline; font-size:13px; padding:4px; }
-  a { color:var(--acc); }
-  .sel { display:flex; gap:8px; flex-wrap:wrap; } .sel > div { flex:1; min-width:140px; }
-  svg { width:100%; height:auto; display:block; }
-  #foot { font-size:12px; color:var(--mut); margin-top:8px; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #09090b;
+      --fg: #fafafa;
+      --card: #121215;
+      --surface-sub: #18181c;
+      --line: #27272a;
+      --line-strong: #3f3f46;
+      --mut: #a1a1aa;
+      --ok: #34d399;
+      --ok-bg: rgba(52, 211, 153, 0.12);
+      --warn: #fbbf24;
+      --warn-bg: rgba(251, 191, 36, 0.12);
+      --bad: #f87171;
+      --bad-bg: rgba(248, 113, 113, 0.12);
+      --acc: #3b82f6;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0 0 48px;
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Top Bar */
+  .topbar {
+    background: var(--card);
+    border-bottom: 1px solid var(--line);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+  .topbar-inner {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-title {
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-tabs {
+    display: flex;
+    background: var(--surface-sub);
+    padding: 3px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+  }
+  .nav-tabs a {
+    text-decoration: none;
+    color: var(--mut);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+  }
+  .nav-tabs a.active {
+    background: var(--card);
+    color: var(--fg);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  main { max-width: 1080px; margin: 20px auto 0; padding: 0 20px; }
+
+  h2 {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin: 0 0 12px;
+    color: var(--mut);
+    font-weight: 600;
+  }
+  .section-divider {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 20px 0 10px;
+  }
+  .section-divider h2 { margin: 0; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 13.5px;
+  }
+  .row:last-child { border-bottom: none; padding-bottom: 0; }
+  .row span:first-child { color: var(--mut); }
+  .row span:last-child {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Status Badge with LED dot */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    white-space: nowrap;
+  }
+  .badge::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .ok { color: var(--ok); }
+  .badge.ok { background: var(--ok-bg); border-color: rgba(16, 185, 129, 0.3); }
+  .warn { color: var(--warn); }
+  .badge.warn { background: var(--warn-bg); border-color: rgba(245, 158, 11, 0.3); }
+  .bad { color: var(--bad); }
+  .badge.bad { background: var(--bad-bg); border-color: rgba(239, 68, 68, 0.3); }
+
+  /* Alert Banners */
+  .banner {
+    padding: 11px 14px;
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    font-size: 13.5px;
+    font-weight: 600;
+    border: 1px solid currentColor;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .banner.bad { background: var(--bad-bg); }
+  .banner.warn { background: var(--warn-bg); }
+
+  .title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--mut);
+    display: block;
+    margin: 8px 0 4px;
+  }
+  input, select {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13.5px;
+    font-family: var(--font-sans);
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    background: var(--surface-sub);
+    color: var(--fg);
+    outline: none;
+  }
+  input:focus, select:focus { border-color: var(--acc); }
+
+  button {
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 9px 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--fg);
+    cursor: pointer;
+  }
+  button.primary {
+    background: var(--fg);
+    color: var(--bg);
+    border-color: var(--fg);
+    width: 100%;
+    margin-top: 14px;
+  }
+  .link {
+    background: none;
+    border: none;
+    color: var(--mut);
+    text-decoration: underline;
+    font-size: 12px;
+    padding: 4px 6px;
+  }
+  .link:hover { color: var(--fg); }
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  .sel {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .sel > div { min-width: 160px; }
+  .sel label { margin-top: 0; }
+
+  .chart-wrap {
+    background: var(--surface-sub);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 8px 4px;
+  }
+  svg { width: 100%; height: auto; display: block; overflow: visible; }
+
+  #foot {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--mut);
+    margin-top: 12px;
+    text-align: right;
+  }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <h1>🤖 Robot Dashboard</h1>
-    <div>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <h1 class="brand-title">TELEMETRY MONITOR</h1>
       <span id="gwBadge" class="badge">—</span>
-      <a href="./index.html" style="font-size:13px;margin-left:8px">หน้าสั่งเสียง</a>
+    </div>
+    <div class="topbar-right">
+      <nav class="nav-tabs">
+        <a href="./index.html">สั่งงาน</a>
+        <a href="./dashboard.html" class="active">แดชบอร์ด</a>
+      </nav>
       <button class="link" id="logout" hidden>ออกจากระบบ</button>
     </div>
-  </header>
+  </div>
+</header>
 
+<main>
   <section class="card" id="configErr" hidden>
-    <div class="bad">ยังไม่ได้ใส่ API_KEY หรือ DB_URL ในโค้ด แก้ที่บล็อก CONFIG ด้านบนของ &lt;script&gt;</div>
+    <div class="bad" style="font-size:13px;font-weight:500;">ยังไม่ได้ตั้งค่า API_KEY หรือ DB_URL ในโค้ด แก้ไขที่บล็อก CONFIG ด้านบนของ &lt;script&gt;</div>
   </section>
 
-  <section class="card" id="loginCard" hidden style="max-width:420px">
-    <label>อีเมล</label><input id="email" type="email" autocomplete="username">
-    <label>รหัสผ่าน</label><input id="pass" type="password" autocomplete="current-password">
+  <section class="card" id="loginCard" hidden style="max-width:420px;margin:32px auto;">
+    <h2>Operator Authentication</h2>
+    <label for="email">อีเมล</label>
+    <input id="email" type="email" autocomplete="username">
+    <label for="pass">รหัสผ่าน</label>
+    <input id="pass" type="password" autocomplete="current-password">
     <button class="primary" id="loginBtn">เข้าสู่ระบบ</button>
-    <div id="loginMsg" class="bad" style="margin-top:8px;font-size:14px"></div>
+    <div id="loginMsg" class="bad" style="margin-top:8px;font-size:13px"></div>
   </section>
 
   <section id="mainCard" hidden>
     <div id="banners"></div>
 
     <div class="grid">
-      <div class="card"><h2>Gateway</h2><div id="gw"></div></div>
-      <div class="card"><h2>คำสั่งล่าสุด</h2><div id="ack"></div></div>
+      <div class="card">
+        <h2>Gateway Diagnostics</h2>
+        <div id="gw"></div>
+      </div>
+      <div class="card">
+        <h2>Last Command Execution (ACK)</h2>
+        <div id="ack"></div>
+      </div>
     </div>
 
-    <h2 style="margin:4px 0 8px">ค่าล่าสุดของแต่ละ Node</h2>
+    <div class="section-divider">
+      <h2>Active Sensor Nodes</h2>
+    </div>
     <div class="grid" id="nodes"></div>
 
-    <div class="card">
-      <h2>กราฟย้อนหลัง (60 ค่าล่าสุด)</h2>
-      <div class="sel">
-        <div><label>Node</label><select id="selNode"></select></div>
-        <div><label>ค่าที่ต้องการดู</label><select id="selMetric"></select></div>
+    <div class="card" style="margin-top:14px;">
+      <div class="chart-header">
+        <div>
+          <h2 style="margin-bottom:2px;">Time-Series Telemetry (60 Samples)</h2>
+          <div style="font-size:12px;color:var(--mut);">กราฟแสดงผลข้อมูลย้อนหลังจากเซนเซอร์แบบเรียลไทม์</div>
+        </div>
+        <div class="sel">
+          <div><label for="selNode">Node ID</label><select id="selNode"></select></div>
+          <div><label for="selMetric">Metric</label><select id="selMetric"></select></div>
+        </div>
       </div>
-      <svg id="chart" viewBox="0 0 600 240" role="img" aria-label="กราฟค่าเซนเซอร์ย้อนหลัง"></svg>
+      <div class="chart-wrap">
+        <svg id="chart" viewBox="0 0 600 240" role="img" aria-label="กราฟค่าเซนเซอร์ย้อนหลัง"></svg>
+      </div>
     </div>
+
     <div id="foot"></div>
   </section>
 </main>
@@ -183,40 +469,40 @@ function renderStatus(st) {
   const banners = $("banners"); banners.textContent = "";
   const badge = $("gwBadge");
   if (!st) {
-    badge.textContent = "Gateway: ไม่มีข้อมูล"; badge.className = "badge bad";
+    badge.textContent = "GATEWAY OFFLINE"; badge.className = "badge bad";
     addRow(gw, "สถานะ", "ยังไม่เคยส่งสถานะ", "bad");
     return;
   }
   const a = ageInfo(st.ts, 15, 45);
-  badge.textContent = a.cls === "ok" ? "Gateway ออนไลน์" : "Gateway ขาดการติดต่อ"; badge.className = "badge " + (a.cls === "ok" ? "ok" : "bad");
-  if (a.cls !== "ok") { const b = el("div", "banner bad", "⚠️ Gateway ไม่ได้ส่งสถานะมา " + a.text); banners.appendChild(b); }
-  if (st.estop)    banners.appendChild(el("div", "banner bad",  "⛔ E-STOP ถูกกด หุ่นปฏิเสธทุกคำสั่งจนกว่าจะรีเซ็ตบอร์ด"));
-  if (st.obstacle) banners.appendChild(el("div", "banner warn", "🚧 ตรวจพบสิ่งกีดขวางด้านหน้า"));
+  badge.textContent = a.cls === "ok" ? "GATEWAY ONLINE" : "GATEWAY DISCONNECTED"; badge.className = "badge " + (a.cls === "ok" ? "ok" : "bad");
+  if (a.cls !== "ok") { const b = el("div", "banner bad", "[ALERT] Gateway ไม่ได้ส่งสถานะมา " + a.text); banners.appendChild(b); }
+  if (st.estop)    banners.appendChild(el("div", "banner bad",  "[E-STOP ACTIVE] ปุ่มหยุดฉุกเฉินถูกกด หุ่นยนต์ปฏิเสธทุกคำสั่งจนกว่าจะรีเซ็ตบอร์ด"));
+  if (st.obstacle) banners.appendChild(el("div", "banner warn", "[OBSTACLE] ตรวจพบสิ่งกีดขวางในระยะด้านหน้า"));
 
   addRow(gw, "อัปเดตล่าสุด", a.text, a.cls);
-  addRow(gw, "เปิดเครื่องมาแล้ว", fmtUptime(st.uptime_s));
-  addRow(gw, "สัญญาณ Wi-Fi", fmt(st.wifi_rssi) + " dBm");
-  addRow(gw, "หน่วยความจำว่าง", Math.round((st.free_heap || 0) / 1024) + " KB");
-  addRow(gw, "ข้อมูลค้างในบัฟเฟอร์", fmt(st.buffered_items || 0) + " รายการ", (st.buffered_items || 0) > 0 ? "warn" : "");
+  addRow(gw, "เวลาทำงาน (Uptime)", fmtUptime(st.uptime_s));
+  addRow(gw, "สัญญาณ Wi-Fi (RSSI)", fmt(st.wifi_rssi) + " dBm");
+  addRow(gw, "หน่วยความจำว่าง (Free Heap)", Math.round((st.free_heap || 0) / 1024) + " KB");
+  addRow(gw, "คิวค้างในบัฟเฟอร์", fmt(st.buffered_items || 0) + " รายการ", (st.buffered_items || 0) > 0 ? "warn" : "");
   const m = st.metrics || {};
-  addRow(gw, "ส่งขึ้น Cloud สำเร็จ/ล้มเหลว", fmt(m.http_ok_count || 0) + " / " + fmt(m.http_fail_count || 0));
-  addRow(gw, "Latency ต่ำสุด/เฉลี่ย/สูงสุด", `${fmt(m.latency_min_ms || 0)} / ${fmt(m.latency_avg_ms || 0)} / ${fmt(m.latency_max_ms || 0)} ms`);
+  addRow(gw, "HTTP Cloud (สำเร็จ / ล้มเหลว)", fmt(m.http_ok_count || 0) + " / " + fmt(m.http_fail_count || 0));
+  addRow(gw, "Latency (Min / Avg / Max)", `${fmt(m.latency_min_ms || 0)} / ${fmt(m.latency_avg_ms || 0)} / ${fmt(m.latency_max_ms || 0)} ms`);
 }
 
 function renderAck(ack) {
   const box = $("ack"); box.textContent = "";
-  if (!ack) { addRow(box, "สถานะ", "ยังไม่มีคำสั่ง"); return; }
+  if (!ack) { addRow(box, "สถานะ", "ยังไม่มีประวัติคำสั่ง"); return; }
   const cls = ack.status === "executed" ? "ok" : (ack.status === "rejected" ? "bad" : "warn");
-  addRow(box, "คำสั่ง", ack.action || "-");
-  addRow(box, "ผล", ack.status || "-", cls);
-  if (ack.reason) addRow(box, "เหตุผล", ack.reason);
-  addRow(box, "เมื่อ", ageInfo(ack.ts, 1e9, 1e9).text);
+  addRow(box, "คำสั่ง (Action)", ack.action || "-");
+  addRow(box, "ผลลัพธ์ (Status)", ack.status || "-", cls);
+  if (ack.reason) addRow(box, "สาเหตุ (Reason)", ack.reason);
+  addRow(box, "เวลาประมวลผล", ageInfo(ack.ts, 1e9, 1e9).text);
 }
 
 function renderNodes(latest) {
   const grid = $("nodes"); grid.textContent = "";
   const ids = Object.keys(latest || {}).sort();
-  if (!ids.length) { grid.appendChild(el("div", "card", "ยังไม่มีข้อมูลเซนเซอร์")); return; }
+  if (!ids.length) { grid.appendChild(el("div", "card", "ยังไม่มีข้อมูลเซนเซอร์จาก Node")); return; }
   ids.forEach(id => {
     const d = latest[id] || {};
     const a = ageInfo(d.ts, 15, 40);
@@ -229,7 +515,7 @@ function renderNodes(latest) {
       const [label, unit] = LABELS[k] || [k, ""];
       addRow(card, label, fmt(d[k]) + (unit ? " " + unit : ""));
     });
-    if (d.seq !== undefined) addRow(card, "seq", fmt(d.seq));
+    if (d.seq !== undefined) addRow(card, "Sequence (seq)", "#" + fmt(d.seq));
     grid.appendChild(card);
   });
 }
@@ -253,7 +539,7 @@ function syncSelectors(latest) {
   }
 }
 
-/* ---------- กราฟ (SVG วาดเอง ไม่ใช้ไลบรารี) ---------- */
+/* ---------- กราฟ (SVG วาดเอง พร้อม Gradient Fill) ---------- */
 const NS = "http://www.w3.org/2000/svg";
 function s(tag, attrs, text) {
   const e = document.createElementNS(NS, tag);
@@ -263,11 +549,19 @@ function s(tag, attrs, text) {
 }
 function drawChart(points, unit) {
   const svg = $("chart"); svg.textContent = "";
-  const W = 600, H = 240, L = 48, R = 12, T = 12, B = 28;
+  const W = 600, H = 240, L = 52, R = 16, T = 18, B = 28;
   if (points.length < 2) {
-    svg.appendChild(s("text", { x: W / 2, y: H / 2, "text-anchor": "middle", fill: "var(--mut)", "font-size": 14 }, "ยังมีข้อมูลไม่พอสำหรับวาดกราฟ"));
+    svg.appendChild(s("text", { x: W / 2, y: H / 2, "text-anchor": "middle", fill: "var(--mut)", "font-size": 13, "font-family": "var(--font-mono)" }, "กำลังรอข้อมูลอย่างน้อย 2 จุดเพื่อวาดกราฟ..."));
     return;
   }
+
+  const defs = s("defs");
+  const grad = s("linearGradient", { id: "areaGrad", x1: "0", y1: "0", x2: "0", y2: "1" });
+  grad.appendChild(s("stop", { offset: "0%", "stop-color": "var(--acc)", "stop-opacity": "0.24" }));
+  grad.appendChild(s("stop", { offset: "100%", "stop-color": "var(--acc)", "stop-opacity": "0.0" }));
+  defs.appendChild(grad);
+  svg.appendChild(defs);
+
   const ts = points.map(p => p.t), vs = points.map(p => p.v);
   let vmin = Math.min(...vs), vmax = Math.max(...vs);
   if (vmin === vmax) { vmin -= 1; vmax += 1; }
@@ -275,18 +569,36 @@ function drawChart(points, unit) {
   const tmin = ts[0], tmax = ts[ts.length - 1] || tmin + 1;
   const X = t => L + (W - L - R) * (t - tmin) / ((tmax - tmin) || 1);
   const Y = v => T + (H - T - B) * (1 - (v - vmin) / (vmax - vmin));
+
   for (let i = 0; i <= 4; i++) {
     const v = vmin + (vmax - vmin) * i / 4, y = Y(v);
-    svg.appendChild(s("line", { x1: L, x2: W - R, y1: y, y2: y, stroke: "var(--line)", "stroke-width": 1 }));
-    svg.appendChild(s("text", { x: L - 6, y: y + 4, "text-anchor": "end", fill: "var(--mut)", "font-size": 11 }, v.toFixed(1)));
+    svg.appendChild(s("line", { x1: L, x2: W - R, y1: y, y2: y, stroke: "var(--line)", "stroke-width": 1, "stroke-dasharray": i === 0 ? "" : "3,3" }));
+    svg.appendChild(s("text", { x: L - 8, y: y + 4, "text-anchor": "end", fill: "var(--mut)", "font-size": 10.5, "font-family": "var(--font-mono)" }, v.toFixed(1)));
   }
+
   const tl = t => new Date(t * 1000).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  svg.appendChild(s("text", { x: L, y: H - 8, fill: "var(--mut)", "font-size": 11 }, tl(tmin)));
-  svg.appendChild(s("text", { x: W - R, y: H - 8, "text-anchor": "end", fill: "var(--mut)", "font-size": 11 }, tl(tmax)));
-  if (unit) svg.appendChild(s("text", { x: 4, y: 12, fill: "var(--mut)", "font-size": 11 }, unit));
-  svg.appendChild(s("polyline", { points: points.map(p => X(p.t).toFixed(1) + "," + Y(p.v).toFixed(1)).join(" "),
-    fill: "none", stroke: "var(--acc)", "stroke-width": 2, "stroke-linejoin": "round" }));
-  points.forEach(p => svg.appendChild(s("circle", { cx: X(p.t), cy: Y(p.v), r: 2.5, fill: "var(--acc)" })));
+  svg.appendChild(s("text", { x: L, y: H - 6, fill: "var(--mut)", "font-size": 10.5, "font-family": "var(--font-mono)" }, tl(tmin)));
+  svg.appendChild(s("text", { x: W - R, y: H - 6, "text-anchor": "end", fill: "var(--mut)", "font-size": 10.5, "font-family": "var(--font-mono)" }, tl(tmax)));
+  if (unit) svg.appendChild(s("text", { x: L, y: 11, fill: "var(--mut)", "font-size": 10.5, "font-family": "var(--font-mono)", "font-weight": "600" }, "UNIT: " + unit));
+
+  const polyPts = points.map(p => X(p.t).toFixed(1) + "," + Y(p.v).toFixed(1)).join(" ");
+  const areaPts = `${X(points[0].t).toFixed(1)},${H - B} ${polyPts} ${X(points[points.length - 1].t).toFixed(1)},${H - B}`;
+  svg.appendChild(s("polygon", { points: areaPts, fill: "url(#areaGrad)" }));
+
+  svg.appendChild(s("polyline", {
+    points: polyPts,
+    fill: "none", stroke: "var(--acc)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round"
+  }));
+  points.forEach((p, idx) => {
+    const isLast = idx === points.length - 1;
+    svg.appendChild(s("circle", {
+      cx: X(p.t), cy: Y(p.v),
+      r: isLast ? 4 : 2.2,
+      fill: isLast ? "var(--card)" : "var(--acc)",
+      stroke: isLast ? "var(--acc)" : "none",
+      "stroke-width": isLast ? 2 : 0
+    }));
+  });
 }
 
 async function refreshChart() {
@@ -307,7 +619,7 @@ $("selMetric").onchange = () => refreshChart().catch(showErr);
 let timer = null, busy = false, tickCount = 0;
 function showErr(e) {
   if (e && e.fatal) { store.del("rt"); showLogin(); return; }
-  $("foot").textContent = "⚠️ ดึงข้อมูลไม่สำเร็จ: " + (e && e.message ? e.message : e);
+  $("foot").textContent = "[SYNC ERROR] ดึงข้อมูลไม่สำเร็จ: " + (e && e.message ? e.message : e);
 }
 async function tick() {
   if (busy) return;
@@ -319,7 +631,7 @@ async function tick() {
     renderStatus(status); renderAck(ack); renderNodes(latestCache); syncSelectors(latestCache);
     if (tickCount % 3 === 0) await refreshChart();      // กราฟอัปเดตทุก ~6 วินาที
     tickCount++;
-    $("foot").textContent = "อัปเดตล่าสุด " + new Date().toLocaleTimeString("th-TH") + " (ดึงข้อมูลทุก 2 วินาที)";
+    $("foot").textContent = "LAST SYNC: " + new Date().toLocaleTimeString("th-TH") + " (POLLING 2.0s)";
   } catch (e) { showErr(e); }
   finally { busy = false; }
 }
