@@ -441,8 +441,11 @@ $("logout").onclick = () => { store.del("rt"); idToken = ""; showLogin(); };
 
 /* ---------- แสดงผล ---------- */
 const LABELS = {
-  ultrasonic_cm: ["ระยะ Ultrasonic", "cm"], pitch_deg: ["Pitch", "°"], roll_deg: ["Roll", "°"],
-  temp_c: ["อุณหภูมิ", "°C"], humid_pct: ["ความชื้น", "%"], ldr_raw: ["แสง (LDR)", ""], battery_volt: ["แบตเตอรี่", "V"],
+  ultrasonic_cm: ["ระยะ Ultrasonic", "cm"],
+  pitch_deg:     ["มุมเอียง Pitch", "°"],
+  roll_deg:      ["มุมเอียง Roll", "°"],
+  temp_c:        ["อุณหภูมิ (KY-013)", "°C"],
+  ldr_raw:       ["ความเข้มแสง (KY-018)", ""],
 };
 const HIDDEN_KEYS = new Set(["node_id", "ts", "seq"]);
 const now = () => Date.now() / 1000;
@@ -476,7 +479,7 @@ function renderStatus(st) {
   const a = ageInfo(st.ts, 15, 45);
   badge.textContent = a.cls === "ok" ? "GATEWAY ONLINE" : "GATEWAY DISCONNECTED"; badge.className = "badge " + (a.cls === "ok" ? "ok" : "bad");
   if (a.cls !== "ok") { const b = el("div", "banner bad", "[ALERT] Gateway ไม่ได้ส่งสถานะมา " + a.text); banners.appendChild(b); }
-  if (st.estop)    banners.appendChild(el("div", "banner bad",  "[E-STOP ACTIVE] ปุ่มหยุดฉุกเฉินถูกกด หุ่นยนต์ปฏิเสธทุกคำสั่งจนกว่าจะรีเซ็ตบอร์ด"));
+  if (st.estop)    banners.appendChild(el("div", "banner bad",  "[E-STOP ACTIVE] ระบบหยุดฉุกเฉินทำงาน (ปุ่มกด หรือ เสียงดังจาก KY-037) ปฏิเสธทุกคำสั่งจนกว่าจะรีเซ็ตบอร์ด"));
   if (st.obstacle) banners.appendChild(el("div", "banner warn", "[OBSTACLE] ตรวจพบสิ่งกีดขวางในระยะด้านหน้า"));
 
   addRow(gw, "อัปเดตล่าสุด", a.text, a.cls);
