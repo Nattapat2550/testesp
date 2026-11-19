@@ -539,31 +539,52 @@ $("snapBtn").onclick = async () => {
 /* ---------- โหมดถ่ายต่อเนื่อง ----------
    ส่งคำสั่งถ่าย -> รอจนภาพใหม่มาถึง (หรือหมดเวลา) -> พักนิดหนึ่ง -> ถ่ายใหม่
    มีคำสั่งค้างทีละ 1 อันเท่านั้น จะได้ไม่ท่วมคิว commands/pending */
-const AUTO = { on: false, gapMs: 500, timeoutMs: 8000, pollMs: 700 };
+const AUTO = { on: false, gapMs: 0, timeoutMs: 4000, pollMs: 250 };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// เช็กว่าภาพใหม่มาหรือยัง แบบเบา ๆ: ขอแค่ ts (ไม่โหลดภาพ) ถ้า ts เปลี่ยนค่อยโหลดภาพเต็ม
+async function camChanged(beforeTs, beforeKey) {
+  const ts = await dbGet("/camera/latest/ts");
+  if (ts !== beforeTs) return true;
+  // ts ซ้ำได้ถ้าถ่ายภายในวินาทีเดียวกัน -> ทุก ๆ 4 รอบเช็กภาพเต็มเผื่อไว้
+  camChanged.n = (camChanged.n || 0) + 1;
+  if (camChanged.n % 4 === 0) {
+    const cam = await dbGet("/camera/latest");
+    return camKey(cam) !== beforeKey;
+  }
+  return false;
+}
+
 async function autoLoop() {
-  let frames = 0, t0 = Date.now();
+  let frames = 0, t0 = Date.now(), sumRtt = 0;
+  let curTs = await dbGet("/camera/latest/ts");
   while (AUTO.on) {
     try {
-      const before = lastCamKey;
+      const before = lastCamKey, tSend = Date.now();
       await sendCapture("dashboard_auto");
       const deadline = Date.now() + AUTO.timeoutMs;
+      let got = false;
       while (AUTO.on && Date.now() < deadline) {
         await sleep(AUTO.pollMs);
+        if (await camChanged(curTs, before)) { got = true; break; }
+      }
+      if (got) {
+        frames++;
+        sumRtt += Date.now() - tSend;
         const [cam, det, ann] = await Promise.all([
           dbGet("/camera/latest"), dbGet("/vision/result"), dbGet("/vision/annotated")
         ]);
+        curTs = cam && cam.ts;
         renderCamera(cam, ann);
         renderDetection(det);
-        if (lastCamKey !== before) { frames++; break; }
       }
       const fps = frames / ((Date.now() - t0) / 1000);
-      $("autoBtn").textContent = "■ หยุด (" + frames + " ภาพ, " + fps.toFixed(2) + " fps)";
-      await sleep(AUTO.gapMs);
+      const rtt = frames ? Math.round(sumRtt / frames) : 0;
+      $("autoBtn").textContent = "■ หยุด (" + frames + " ภาพ, " + fps.toFixed(2) + " fps, สั่ง→ได้ภาพ ~" + rtt + " ms)";
+      if (AUTO.gapMs) await sleep(AUTO.gapMs);
     } catch (e) {
       showErr(e);
-      await sleep(2000);
+      await sleep(1000);
     }
   }
 }

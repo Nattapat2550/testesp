@@ -24,7 +24,7 @@ PASSWORD = CFG["password"]
 
 MODEL_PATH = "best.pt"
 CONF_TH = 0.5
-POLL_SEC = 0.4            # เช็กภาพใหม่ทุกกี่วินาที
+POLL_SEC = 0.2            # เช็กภาพใหม่ทุกกี่วินาที
 # class ใน best.pt ของเรา: "black-eraser", "wrapped eraser"
 TARGET_CLASSES = {"black-eraser", "wrapped eraser"}
 
@@ -154,16 +154,23 @@ def process(data, key):
 
 def main():
     token()
+    model(np.zeros((480, 640, 3), np.uint8), verbose=False)   # warm-up: ภาพแรกจะได้ไม่ช้า
     print("รอภาพใหม่ที่ camera/latest ... (Ctrl+C เพื่อหยุด)")
-    last_key = None
+    last_key, last_ts, n = None, object(), 0
     while True:
         try:
-            data = db_get("/camera/latest")
-            if data and data.get("img"):
-                key = cam_key(data)
-                if key != last_key:          # ภาพใหม่เท่านั้น -> วิเคราะห์ทุกภาพที่เข้ามาตลอด
-                    last_key = key
-                    process(data, key)
+            # เช็กแค่ ts ก่อน (เบามาก) ถ้าเปลี่ยนค่อยโหลดภาพเต็ม
+            # ts ซ้ำได้ถ้าถ่ายในวินาทีเดียวกัน -> ทุก ๆ 4 รอบโหลดภาพเต็มเช็กเผื่อ
+            ts = db_get("/camera/latest/ts")
+            n += 1
+            if ts != last_ts or n % 4 == 0:
+                data = db_get("/camera/latest")
+                if data and data.get("img"):
+                    last_ts = data.get("ts")
+                    key = cam_key(data)
+                    if key != last_key:          # ภาพใหม่เท่านั้น
+                        last_key = key
+                        process(data, key)
         except requests.RequestException as e:
             print("เน็ต/Firebase error:", e)
             time.sleep(2)
