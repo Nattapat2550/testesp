@@ -243,7 +243,10 @@
     background: var(--card);
     color: var(--fg);
     cursor: pointer;
+    transition: all 0.15s ease;
   }
+  button:hover { background: var(--surface-sub); border-color: var(--mut); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
   button.primary {
     background: var(--fg);
     color: var(--bg);
@@ -251,6 +254,12 @@
     width: 100%;
     margin-top: 14px;
   }
+  button.acc-btn {
+    background: var(--acc);
+    color: #ffffff;
+    border-color: var(--acc);
+  }
+  button.acc-btn:hover { opacity: 0.9; }
   .link {
     background: none;
     border: none;
@@ -260,6 +269,34 @@
     padding: 4px 6px;
   }
   .link:hover { color: var(--fg); }
+
+  /* Camera Snapshot Box */
+  .cam-wrap {
+    background: var(--surface-sub);
+    border: 1px dashed var(--line-strong);
+    border-radius: 6px;
+    min-height: 200px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    margin-top: 10px;
+    position: relative;
+  }
+  .cam-wrap img {
+    width: 100%;
+    max-width: 480px;
+    height: auto;
+    display: block;
+    border-radius: 4px;
+  }
+  .cam-empty {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--mut);
+    text-align: center;
+    padding: 20px;
+  }
 
   .chart-header {
     display: flex;
@@ -341,6 +378,21 @@
       </div>
     </div>
 
+    <!-- การ์ดควบคุมและแสดงภาพจาก ESP32-CAM -->
+    <div class="card" style="margin-bottom: 14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div>
+          <h2 style="margin-bottom:2px;">ESP32-CAM Vision Snapshot</h2>
+          <div id="camMeta" style="font-size:12px; color:var(--mut); font-family:var(--font-mono);">สถานะ: รอคำสั่งถ่ายภาพ</div>
+        </div>
+        <button id="snapBtn" class="acc-btn">ถ่ายภาพ (Capture Snapshot)</button>
+      </div>
+      <div class="cam-wrap">
+        <div id="camEmpty" class="cam-empty">ยังไม่มีภาพถ่าย กดปุ่ม "ถ่ายภาพ" ด้านบนเพื่อสั่งกล้อง</div>
+        <img id="camImg" alt="ESP32-CAM Snapshot" hidden>
+      </div>
+    </div>
+
     <div class="section-divider">
       <h2>Active Sensor Nodes</h2>
     </div>
@@ -391,7 +443,7 @@ function el(tag, cls, text) {
   return e;
 }
 
-/* ---------- Auth (ใช้ refresh token ตัวเดียวกับหน้าสั่งเสียง ถ้าอยู่โดเมนเดียวกัน) ---------- */
+/* ---------- Auth ---------- */
 let idToken = "", tokenExp = 0;
 
 async function signIn(email, password) {
@@ -428,6 +480,18 @@ async function dbGet(path, extra) {
   }
 }
 
+async function dbPost(path, body) {
+  const base = CONFIG.DB_URL.trim().replace(/\/+$/, "");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await ensureToken();
+    const r = await fetch(base + path + ".json?auth=" + encodeURIComponent(idToken),
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    if (r.status === 401 && attempt === 0) { idToken = ""; continue; }
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }
+}
+
 function showLogin() { $("mainCard").hidden = true; $("loginCard").hidden = false; $("logout").hidden = true; $("email").value = CONFIG.EMAIL || store.get("email"); stopPolling(); }
 function showMain()  { $("loginCard").hidden = true; $("mainCard").hidden = false; $("logout").hidden = false; startPolling(); }
 
@@ -438,6 +502,42 @@ $("loginBtn").onclick = async () => {
   catch (e) { $("loginMsg").textContent = "ล็อกอินไม่สำเร็จ: " + e.message; }
 };
 $("logout").onclick = () => { store.del("rt"); idToken = ""; showLogin(); };
+
+/* ---------- ปุ่มสั่งถ่ายภาพ ESP32-CAM ---------- */
+let lastCamTs = 0;
+$("snapBtn").onclick = async () => {
+  const btn = $("snapBtn");
+  btn.disabled = true;
+  $("camMeta").textContent = "สถานะ: กำลังส่งคำสั่งถ่ายภาพไปที่ Gateway...";
+  try {
+    await dbPost("/commands/pending", {
+      action: "capture",
+      text: "dashboard_snap",
+      source: "dashboard",
+      ts: Math.floor(Date.now() / 1000)
+    });
+    $("camMeta").textContent = "สถานะ: ส่งคำสั่งแล้ว กำลังรอภาพจากกล้อง...";
+  } catch (e) {
+    $("camMeta").textContent = "ส่งคำสั่งไม่สำเร็จ: " + e.message;
+  } finally {
+    setTimeout(() => { btn.disabled = false; }, 1500);
+  }
+};
+
+function renderCamera(cam) {
+  if (!cam || !cam.img) return;
+  if (cam.ts && cam.ts !== lastCamTs) {
+    lastCamTs = cam.ts;
+    const imgEl = $("camImg");
+    imgEl.src = "data:image/jpeg;base64," + cam.img;
+    imgEl.hidden = false;
+    $("camEmpty").hidden = true;
+  }
+  if (cam.ts) {
+    const a = ageInfo(cam.ts, 15, 60);
+    $("camMeta").textContent = "อัปเดตภาพล่าสุด: " + a.text;
+  }
+}
 
 /* ---------- แสดงผล ---------- */
 const LABELS = {
@@ -628,11 +728,19 @@ async function tick() {
   if (busy) return;
   busy = true;
   try {
-    const [latest, status, ack] = await Promise.all([
-      dbGet("/telemetry/latest"), dbGet("/status/gateway"), dbGet("/commands/last_ack")]);
+    const [latest, status, ack, cam] = await Promise.all([
+      dbGet("/telemetry/latest"),
+      dbGet("/status/gateway"),
+      dbGet("/commands/last_ack"),
+      dbGet("/camera/latest")
+    ]);
     latestCache = latest || {};
-    renderStatus(status); renderAck(ack); renderNodes(latestCache); syncSelectors(latestCache);
-    if (tickCount % 3 === 0) await refreshChart();      // กราฟอัปเดตทุก ~6 วินาที
+    renderStatus(status);
+    renderAck(ack);
+    renderCamera(cam);
+    renderNodes(latestCache);
+    syncSelectors(latestCache);
+    if (tickCount % 3 === 0) await refreshChart();
     tickCount++;
     $("foot").textContent = "LAST SYNC: " + new Date().toLocaleTimeString("th-TH") + " (POLLING 2.0s)";
   } catch (e) { showErr(e); }
