@@ -290,6 +290,7 @@
     display: block;
     border-radius: 4px;
   }
+  button.acc-btn.on { background: #d9534f; }
   .cam-empty {
     font-family: var(--font-mono);
     font-size: 12px;
@@ -385,8 +386,12 @@
           <h2 style="margin-bottom:2px;">ESP32-CAM Vision Snapshot</h2>
           <div id="camMeta" style="font-size:12px; color:var(--mut); font-family:var(--font-mono);">สถานะ: รอคำสั่งถ่ายภาพ</div>
         </div>
-        <button id="snapBtn" class="acc-btn">ถ่ายภาพ (Capture Snapshot)</button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button id="snapBtn" class="acc-btn">ถ่ายภาพ (Capture Snapshot)</button>
+          <button id="autoBtn" class="acc-btn">▶ ถ่ายต่อเนื่อง + Detect</button>
+        </div>
       </div>
+      <div id="detMeta" style="font-size:13px; margin-top:8px; font-family:var(--font-mono); color:var(--mut);">Detection: -</div>
       <div class="cam-wrap">
         <div id="camEmpty" class="cam-empty">ยังไม่มีภาพถ่าย กดปุ่ม "ถ่ายภาพ" ด้านบนเพื่อสั่งกล้อง</div>
         <img id="camImg" alt="ESP32-CAM Snapshot" hidden>
@@ -501,21 +506,28 @@ $("loginBtn").onclick = async () => {
   try { await signIn(email, $("pass").value); store.set("email", email); $("pass").value = ""; showMain(); }
   catch (e) { $("loginMsg").textContent = "ล็อกอินไม่สำเร็จ: " + e.message; }
 };
-$("logout").onclick = () => { store.del("rt"); idToken = ""; showLogin(); };
+$("logout").onclick = () => { AUTO.on = false; store.del("rt"); idToken = ""; showLogin(); };
 
 /* ---------- ปุ่มสั่งถ่ายภาพ ESP32-CAM ---------- */
-let lastCamTs = 0;
+let lastCamKey = "";
+// ts เป็นวินาที ถ้าถ่ายถี่ ๆ อาจได้ ts ซ้ำ จึงใช้ ts + ความยาว + ท้ายภาพ เป็นตัวบอกว่า "ภาพใหม่"
+function camKey(cam) { return cam && cam.img ? cam.ts + ":" + cam.img.length + ":" + cam.img.slice(-24) : ""; }
+
+async function sendCapture(text) {
+  await dbPost("/commands/pending", {
+    action: "capture",
+    text: text || "dashboard_snap",
+    source: "dashboard",
+    ts: Math.floor(Date.now() / 1000)
+  });
+}
+
 $("snapBtn").onclick = async () => {
   const btn = $("snapBtn");
   btn.disabled = true;
   $("camMeta").textContent = "สถานะ: กำลังส่งคำสั่งถ่ายภาพไปที่ Gateway...";
   try {
-    await dbPost("/commands/pending", {
-      action: "capture",
-      text: "dashboard_snap",
-      source: "dashboard",
-      ts: Math.floor(Date.now() / 1000)
-    });
+    await sendCapture();
     $("camMeta").textContent = "สถานะ: ส่งคำสั่งแล้ว กำลังรอภาพจากกล้อง...";
   } catch (e) {
     $("camMeta").textContent = "ส่งคำสั่งไม่สำเร็จ: " + e.message;
@@ -524,18 +536,80 @@ $("snapBtn").onclick = async () => {
   }
 };
 
-function renderCamera(cam) {
+/* ---------- โหมดถ่ายต่อเนื่อง ----------
+   ส่งคำสั่งถ่าย -> รอจนภาพใหม่มาถึง (หรือหมดเวลา) -> พักนิดหนึ่ง -> ถ่ายใหม่
+   มีคำสั่งค้างทีละ 1 อันเท่านั้น จะได้ไม่ท่วมคิว commands/pending */
+const AUTO = { on: false, gapMs: 500, timeoutMs: 8000, pollMs: 700 };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function autoLoop() {
+  let frames = 0, t0 = Date.now();
+  while (AUTO.on) {
+    try {
+      const before = lastCamKey;
+      await sendCapture("dashboard_auto");
+      const deadline = Date.now() + AUTO.timeoutMs;
+      while (AUTO.on && Date.now() < deadline) {
+        await sleep(AUTO.pollMs);
+        const [cam, det, ann] = await Promise.all([
+          dbGet("/camera/latest"), dbGet("/vision/result"), dbGet("/vision/annotated")
+        ]);
+        renderCamera(cam, ann);
+        renderDetection(det);
+        if (lastCamKey !== before) { frames++; break; }
+      }
+      const fps = frames / ((Date.now() - t0) / 1000);
+      $("autoBtn").textContent = "■ หยุด (" + frames + " ภาพ, " + fps.toFixed(2) + " fps)";
+      await sleep(AUTO.gapMs);
+    } catch (e) {
+      showErr(e);
+      await sleep(2000);
+    }
+  }
+}
+
+$("autoBtn").onclick = () => {
+  AUTO.on = !AUTO.on;
+  const btn = $("autoBtn");
+  btn.classList.toggle("on", AUTO.on);
+  btn.textContent = AUTO.on ? "■ หยุด" : "▶ ถ่ายต่อเนื่อง + Detect";
+  $("snapBtn").disabled = AUTO.on;
+  if (AUTO.on) autoLoop();
+};
+
+function renderCamera(cam, ann) {
   if (!cam || !cam.img) return;
-  if (cam.ts && cam.ts !== lastCamTs) {
-    lastCamTs = cam.ts;
-    const imgEl = $("camImg");
-    imgEl.src = "data:image/jpeg;base64," + cam.img;
+  const key = camKey(cam);
+  const imgEl = $("camImg");
+  // ถ้ามีภาพที่ model วาดกรอบแล้ว และเป็นของภาพล่าสุด -> โชว์ภาพมีกรอบแทน
+  const annOk = ann && ann.img && ann.src_key === key;
+  const showKey = key + (annOk ? ":ann" : "");
+  if (showKey !== imgEl.dataset.key) {
+    imgEl.dataset.key = showKey;
+    imgEl.src = "data:image/jpeg;base64," + (annOk ? ann.img : cam.img);
     imgEl.hidden = false;
     $("camEmpty").hidden = true;
   }
+  lastCamKey = key;
   if (cam.ts) {
     const a = ageInfo(cam.ts, 15, 60);
-    $("camMeta").textContent = "อัปเดตภาพล่าสุด: " + a.text;
+    $("camMeta").textContent = "อัปเดตภาพล่าสุด: " + a.text + (annOk ? "  [มีกรอบ detect]" : "");
+  }
+}
+
+function renderDetection(det) {
+  const box = $("detMeta");
+  if (!det) { box.textContent = "Detection: ยังไม่มีผล (เปิด vision_worker.py หรือยัง?)"; box.style.color = "var(--mut)"; return; }
+  const age = Math.floor(Date.now() / 1000) - (det.done_at || 0);
+  const stale = age > 15 ? "  (ผลเก่า " + age + " วิ — worker อาจไม่ได้รัน)" : "";
+  if (det.found) {
+    const side = det.cx < -0.15 ? "ซ้าย" : det.cx > 0.15 ? "ขวา" : "กลาง";
+    box.textContent = "Detection: เจอ " + det.label + " " + Math.round(det.conf * 100) + "% | อยู่" + side +
+      " (cx " + det.cx + ", cy " + det.cy + ") | area " + det.area + " | " + det.infer_ms + " ms" + stale;
+    box.style.color = stale ? "var(--mut)" : "#3fb950";
+  } else {
+    box.textContent = "Detection: ไม่เจอยางลบ | " + det.infer_ms + " ms" + stale;
+    box.style.color = "var(--mut)";
   }
 }
 
@@ -728,16 +802,19 @@ async function tick() {
   if (busy) return;
   busy = true;
   try {
-    const [latest, status, ack, cam] = await Promise.all([
+    const [latest, status, ack, cam, det, ann] = await Promise.all([
       dbGet("/telemetry/latest"),
       dbGet("/status/gateway"),
       dbGet("/commands/last_ack"),
-      dbGet("/camera/latest")
+      dbGet("/camera/latest"),
+      dbGet("/vision/result"),
+      dbGet("/vision/annotated")
     ]);
     latestCache = latest || {};
     renderStatus(status);
     renderAck(ack);
-    renderCamera(cam);
+    renderCamera(cam, ann);
+    renderDetection(det);
     renderNodes(latestCache);
     syncSelectors(latestCache);
     if (tickCount % 3 === 0) await refreshChart();

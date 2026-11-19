@@ -1,0 +1,19 @@
+# Firebase key — ห้ามขึ้น GitHub เด็ดขาด
+serviceAccountKey.json
+*serviceAccount*.json
+*-firebase-adminsdk-*.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# ผลรันของ YOLO
+runs/
+
+# VS Code / OS
+.vscode/
+.DS_Store
+Thumbs.db
