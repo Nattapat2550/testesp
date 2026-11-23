@@ -1,3 +1,5 @@
+from typing import Callable
+
 import cv2
 
 from robot_pickup.control.controller import ControlStatus
@@ -59,8 +61,9 @@ def draw_position_overlay(snapshot: VisionSnapshot, target: Detection | None) ->
         title = f"{target.label}  cx {target.cx:+.2f}  cy {target.cy:+.2f}"
     else:
         title = "Target unavailable"
-    cv2.rectangle(frame, (0, 0), (scene.width, 24), (20, 20, 20), -1)
+    cv2.rectangle(frame, (0, 0), (scene.width, 40), (20, 20, 20), -1)
     _text(frame, title, (8, 16))
+    _text(frame, "P  Save pickup point", (8, 33))
     return frame
 
 
@@ -76,14 +79,18 @@ class DebugWindow:
     def show(self, snapshot: VisionSnapshot, status: ControlStatus, beam: BeamSettings) -> bool:
         return self._show(draw_overlay(snapshot, status, beam))
 
-    def show_position(self, snapshot: VisionSnapshot, target: Detection | None) -> bool:
-        return self._show(draw_position_overlay(snapshot, target))
+    def show_position(
+        self, snapshot: VisionSnapshot, target: Detection | None, on_save: Callable[[], None],
+    ) -> bool:
+        return self._show(draw_position_overlay(snapshot, target), on_save)
 
-    def _show(self, frame: Frame) -> bool:
+    def _show(self, frame: Frame, on_save: Callable[[], None] | None = None) -> bool:
         cv2.imshow(self.title, frame)
         key = cv2.waitKey(1) & 0xff
         if key in (ord("q"), 27):
             return False
+        if on_save is not None and key in (ord("p"), ord("P")):
+            on_save()
         try:
             return cv2.getWindowProperty(self.title, cv2.WND_PROP_VISIBLE) >= 1
         except cv2.error:

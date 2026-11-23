@@ -3,7 +3,9 @@
 import json
 import logging
 from contextlib import ExitStack
+from functools import partial
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from threading import Event
 from time import monotonic
 from typing import Callable
@@ -16,6 +18,40 @@ from robot_pickup.models import Detection, Scene, is_fresh
 from robot_pickup.perception.camera import CameraSource, CameraVision
 
 LOG = logging.getLogger(__name__)
+PICKUP_POINT_PATH = Path("pickup-point.json")
+
+
+def save_pickup_point(scene: Scene, target: Detection | None, max_frame_age_s: float) -> None:
+    if target is None or not is_fresh(scene.observed_at, monotonic(), max_frame_age_s):
+        LOG.warning("Show a visible target at the pickup spot before pressing P")
+        return
+
+    point = {
+        "label": target.label,
+        "pickup_cx": round(target.cx, 4),
+        "pickup_cy": round(target.cy, 4),
+        "frame_width": scene.width,
+        "frame_height": scene.height,
+    }
+    temporary_path = None
+    try:
+        with NamedTemporaryFile("w", encoding="utf-8", dir=PICKUP_POINT_PATH.parent, delete=False) as temporary:
+            temporary_path = Path(temporary.name)
+            json.dump(point, temporary, indent=2, allow_nan=False)
+            temporary.write("\n")
+        temporary_path.replace(PICKUP_POINT_PATH)
+        temporary_path = None
+    except (OSError, ValueError) as exc:
+        LOG.error("Could not save the pickup point (%s)", exc)
+        return
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError as exc:
+                LOG.warning("Could not clean up the pickup point temporary file (%s)", exc)
+    LOG.info("Saved pickup point to %s (cx=%+.4f, cy=%+.4f)",
+             PICKUP_POINT_PATH, point["pickup_cx"], point["pickup_cy"])
 
 
 class PositionReporter:
@@ -104,8 +140,10 @@ def run_position_output(config: Config, source: CameraSource, display: bool, ser
                 if serial is not None:
                     serial.poll(now)
                 target = reporter.update(snapshot.scene if snapshot is not None else None, now)
-                if window is not None and snapshot is not None and not window.show_position(snapshot, target):
-                    return 0
+                if window is not None and snapshot is not None:
+                    on_save = partial(save_pickup_point, snapshot.scene, target, config.control.frame_timeout_s)
+                    if not window.show_position(snapshot, target, on_save):
+                        return 0
                 if finished:
                     if vision.error:
                         LOG.error("%s", vision.error)

@@ -2,12 +2,15 @@ import io
 import json
 import unittest
 from contextlib import redirect_stderr
+from dataclasses import replace
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from robot_pickup.__main__ import main
 from robot_pickup.control.controller import TargetPolicy
 from robot_pickup.models import BoundingBox, Detection, Scene
-from robot_pickup.position_output import PositionReporter
+from robot_pickup.position_output import PositionReporter, save_pickup_point
 
 
 class PositionReporterTests(unittest.TestCase):
@@ -52,3 +55,19 @@ class PositionReporterTests(unittest.TestCase):
                 main(["--source", "0", "--position-only", "--hardware", "--activate"])
             self.assertEqual(error.exception.code, 2)
             run.assert_called_once()
+
+    def test_saves_a_fresh_pickup_point_and_preserves_it_when_target_is_missing_or_stale(self) -> None:
+        scene = Scene(1.0, 640, 480, (self.eraser,))
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "pickup-point.json"
+            with patch("robot_pickup.position_output.PICKUP_POINT_PATH", path):
+                with patch("robot_pickup.position_output.monotonic", return_value=1.1):
+                    save_pickup_point(scene, self.eraser, 0.4)
+                    save_pickup_point(scene, None, 0.4)
+                with patch("robot_pickup.position_output.monotonic", return_value=1.5):
+                    moved = replace(self.eraser, cx=0.5)
+                    save_pickup_point(replace(scene, objects=(moved,)), moved, 0.4)
+                self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {
+                    "label": "black-eraser", "pickup_cx": 0.25, "pickup_cy": -0.5,
+                    "frame_width": 640, "frame_height": 480,
+                })

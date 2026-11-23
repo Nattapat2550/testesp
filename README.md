@@ -44,6 +44,13 @@ Replace `0` with the ESP32-CAM MJPEG URL to use the separate camera. Add `--seri
 
 Each line reports the selected eraser's center. `cx` and `cy` run from −1 to +1. The image center is `(0, 0)`, x increases to the right, and y increases downward. `x_px` and `y_px` give the same position in pixels. See the [target position message format](docs/arduino-protocol.md#target-position-output) for the Arduino implementation.
 
+### Teach the pickup spot
+
+1. Fix the ESP32-CAM to the chassis on its centerline and aim it at the floor in front of the gripper. Keep the car parked with motor power off during setup.
+2. Put the eraser where the gripper can reach it from a repeatable arm pose. Mark that spot on the floor and put the arm in its driving pose so the camera can see the eraser.
+3. Run the position preview above with the mounted camera's MJPEG URL. Once it shows the eraser, focus the preview and press **P**. Python saves `pickup_cx` and `pickup_cy` to `pickup-point.json` in the project folder. Pressing **P** on a fresh detection replaces the saved point.
+4. Give `pickup-point.json` and the target message format to the Arduino teammate. The firmware can compare each live `cx` and `cy` with the saved values, adjust the base, and stop inside a tolerance measured on the robot before running the arm's lower, close, and lift sequence. Check the correction directions on the assembled robot and relearn the pickup spot after changing the camera mount or image framing.
+
 ## Test the HC-SR04 with a camera
 
 With USB unplugged and motor power disconnected, wire a standard 5 V HC-SR04 to your bench board. The ESP32 pin mapping is for a classic ESP32 DevKit or ESP32-WROOM-32 development board. Use the 5 V rail exposed by your board while powered over USB. The HC-SR04 `ECHO` output is 5 V and requires a divider before it reaches the ESP32 input. [ESP32 DevKitC pinout](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32/esp32-devkitc/user_guide.html) · [HC-SR04 pinout and logic levels](https://learn.adafruit.com/ultrasonic-sonar-distance-sensors/pinouts)
