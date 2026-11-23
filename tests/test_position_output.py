@@ -10,7 +10,7 @@ from unittest.mock import patch
 from robot_pickup.__main__ import main
 from robot_pickup.control.controller import TargetPolicy
 from robot_pickup.models import BoundingBox, Detection, Scene
-from robot_pickup.position_output import PositionReporter, save_pickup_point
+from robot_pickup.position_output import PickupPoint, PositionReporter, load_pickup_point, save_pickup_point
 
 
 class PositionReporterTests(unittest.TestCase):
@@ -62,12 +62,26 @@ class PositionReporterTests(unittest.TestCase):
             path = Path(directory) / "pickup-point.json"
             with patch("robot_pickup.position_output.PICKUP_POINT_PATH", path):
                 with patch("robot_pickup.position_output.monotonic", return_value=1.1):
-                    save_pickup_point(scene, self.eraser, 0.4)
-                    save_pickup_point(scene, None, 0.4)
+                    saved = save_pickup_point(scene, self.eraser, 0.4, "camera-a")
+                    save_pickup_point(scene, None, 0.4, "camera-a")
                 with patch("robot_pickup.position_output.monotonic", return_value=1.5):
                     moved = replace(self.eraser, cx=0.5)
-                    save_pickup_point(replace(scene, objects=(moved,)), moved, 0.4)
+                    save_pickup_point(replace(scene, objects=(moved,)), moved, 0.4, "camera-a")
                 self.assertEqual(json.loads(path.read_text(encoding="utf-8")), {
                     "label": "black-eraser", "pickup_cx": 0.25, "pickup_cy": -0.5,
-                    "frame_width": 640, "frame_height": 480,
+                    "frame_width": 640, "frame_height": 480, "camera_id": "camera-a",
                 })
+                self.assertEqual(load_pickup_point("camera-a"), saved)
+                self.assertIsNone(load_pickup_point("camera-b"))
+
+    def test_includes_saved_point_only_for_matching_label_and_frame_size(self) -> None:
+        point = PickupPoint("black-eraser", 0.10, 0.40, 640, 480, "camera-a")
+        reporter = PositionReporter(TargetPolicy(), 0.4, self.lines.append, point)
+        reporter.update(Scene(0, 640, 480, (self.eraser,)), 0.0)
+        reporter.update(Scene(0.2, 320, 240, (self.eraser,)), 0.2)
+        wrapped = replace(self.eraser, label="wrapped eraser")
+        reporter.update(Scene(0.4, 640, 480, (wrapped,)), 0.4)
+        matching, wrong_size, wrong_label = [json.loads(line) for line in self.lines]
+        self.assertEqual((matching["pickup_cx"], matching["pickup_cy"]), (0.10, 0.40))
+        self.assertNotIn("pickup_cx", wrong_size)
+        self.assertNotIn("pickup_cx", wrong_label)

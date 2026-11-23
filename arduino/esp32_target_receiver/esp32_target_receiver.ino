@@ -1,9 +1,6 @@
 #include "target_receiver.h"
 #include <cstring>
 
-// Replace these example values with the coordinates in your pickup-point.json.
-constexpr float PICKUP_CX = 0.10f;
-constexpr float PICKUP_CY = 0.40f;
 constexpr float POSITION_TOLERANCE = 0.03f;
 
 TargetReceiver receiver(Serial);
@@ -14,8 +11,11 @@ const char* decideMovement() {
   if (!receiver.latest(target)) {
     return "STOP";
   }
-  const float errorX = target.cx - PICKUP_CX;
-  const float errorY = target.cy - PICKUP_CY;
+  if (!target.hasPickupPoint) {
+    return "WAIT_FOR_PICKUP_POINT";
+  }
+  const float errorX = target.cx - target.pickupCx;
+  const float errorY = target.cy - target.pickupCy;
 
   // This example assumes closer floor targets appear lower in the image.
   if (errorY > POSITION_TOLERANCE) {
