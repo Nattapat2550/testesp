@@ -14,11 +14,15 @@ struct TargetPosition {
 
 class TargetReceiver {
  public:
-  explicit TargetReceiver(Stream& input) : input_(input) {}
+  TargetReceiver() = default;
+  explicit TargetReceiver(Stream& input) : input_(&input) {}
 
   void poll() {
-    for (size_t remaining = sizeof(line_); remaining > 0 && input_.available() > 0; --remaining) {
-      const char next = static_cast<char>(input_.read());
+    if (input_ == nullptr) {
+      return;
+    }
+    for (size_t remaining = sizeof(line_); remaining > 0 && input_->available() > 0; --remaining) {
+      const char next = static_cast<char>(input_->read());
       if (next == '\n') {
         if (!discardLine_ && length_ > 0) {
           line_[length_] = '\0';
@@ -34,6 +38,12 @@ class TargetReceiver {
         }
       }
     }
+  }
+
+  void reset() {
+    found_ = false;
+    length_ = 0;
+    discardLine_ = false;
   }
 
   bool latest(TargetPosition& position, unsigned long timeoutMs = 500) {
@@ -81,7 +91,7 @@ class TargetReceiver {
     return value >= -1.0f && value <= 1.0f;
   }
 
-  Stream& input_;
+  Stream* input_ = nullptr;
   char line_[512];
   size_t length_ = 0;
   bool discardLine_ = false;
