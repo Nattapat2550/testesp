@@ -18,14 +18,14 @@ Use UTF-8 JSON objects terminated by `\n` over a serial port, initially 115200 b
 {"type":"cmd","seq":3,"command":"HEARTBEAT","linear":0.0,"angular":0.0}
 ```
 
-| Command | Behavior |
-| --- | --- |
-| `MOVE` | Set linear velocity and clear rotation. |
-| `TURN` | Rotate in place and clear forward motion. |
-| `VELOCITY` | Apply both axes simultaneously if supported. |
-| `STOP` | Stop the base and safely halt any arm action in progress. Give `STOP` priority. ACK only once the base has stopped and the arm is safe. |
-| `LOWER`, `GRAB`, `LIFT`, `RELEASE` | Start one arm or gripper action while the base is stopped. Send acceptance and then a completion message. |
-| `HEARTBEAT` | Renew the command watchdog without altering motion or reissuing an arm action. |
+| Command                            | Behavior                                                                                                                                |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `MOVE`                             | Set linear velocity and clear rotation.                                                                                                 |
+| `TURN`                             | Rotate in place and clear forward motion.                                                                                               |
+| `VELOCITY`                         | Apply both axes simultaneously if supported.                                                                                            |
+| `STOP`                             | Stop the base and safely halt any arm action in progress. Give `STOP` priority. ACK only once the base has stopped and the arm is safe. |
+| `LOWER`, `GRAB`, `LIFT`, `RELEASE` | Start one arm or gripper action while the base is stopped. Send acceptance and then a completion message.                               |
+| `HEARTBEAT`                        | Renew the command watchdog without altering motion or reissuing an arm action.                                                          |
 
 Speeds are normalized to `[-1, 1]`. Positive linear is forward and positive angular turns toward the right side of the camera image. Clamp the physical speeds in firmware and agree on the mapping to wheel velocities or PWM. Ignore the two speed fields for commands that do not use them. The host sends changes to base motion and sends heartbeats during quiet periods once outstanding ACKs arrive. Each arm step gets one command.
 
@@ -70,12 +70,12 @@ Press **P** in the position preview with the eraser at the gripper's reachable s
 
 The [target receiver sketch](../arduino/esp32_target_receiver/esp32_target_receiver.ino) reads the USB messages and prints its decisions. Install ArduinoJson 7, select **ESP32 Dev Module** in Arduino IDE, and upload the sketch for a bench test. Open Serial Monitor with **115200 baud** and **Newline** selected. With the example pickup point `(0.10, 0.40)`, send these lines one at a time. [ArduinoJson installation guide](https://arduinojson.org/v7/how-to/install-arduinojson/)
 
-| Serial input | Expected decision |
-| --- | --- |
-| `{"type":"target","found":true,"cx":0.30,"cy":0.40}` | `TURN_RIGHT` |
-| `{"type":"target","found":true,"cx":0.11,"cy":0.20}` | `APPROACH` |
-| `{"type":"target","found":true,"cx":0.11,"cy":0.39}` | `READY_TO_PICK` |
-| `{"type":"target","found":false}` | `STOP` |
+| Serial input                                         | Expected decision |
+| ---------------------------------------------------- | ----------------- |
+| `{"type":"target","found":true,"cx":0.30,"cy":0.40}` | `TURN_RIGHT`      |
+| `{"type":"target","found":true,"cx":0.11,"cy":0.20}` | `APPROACH`        |
+| `{"type":"target","found":true,"cx":0.11,"cy":0.39}` | `READY_TO_PICK`   |
+| `{"type":"target","found":false}`                    | `STOP`            |
 
 The sketch prints a decision when it changes. The target expires after 500 ms without a fresh message. Close Serial Monitor before running Python with `--position-only --serial-port` so Python can open that port.
 
