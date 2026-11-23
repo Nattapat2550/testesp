@@ -46,6 +46,30 @@ Each line reports the selected eraser's center. `cx` and `cy` run from −1 to +
 
 Open the [ESP32 target receiver example](arduino/esp32_target_receiver/esp32_target_receiver.ino) in Arduino IDE with ArduinoJson 7 installed. It prints the next movement decision, including `STOP` when data is lost. See the [sample Python and ESP32 output](docs/arduino-protocol.md#example-output).
 
+### Include the receiver in your main Arduino sketch
+
+Copy [target_receiver.h](arduino/esp32_target_receiver/target_receiver.h) into the same folder as your main `.ino` file. Install ArduinoJson 7 in Arduino IDE. Add the include and receiver near the top of your `.ino`.
+
+```cpp
+#include "target_receiver.h"
+TargetReceiver eraserReceiver(Serial);
+```
+
+Use `Serial.begin(115200);` once in your existing `setup()`. Then add this to your existing `loop()` before making a movement decision.
+
+```cpp
+eraserReceiver.poll();
+
+TargetPosition eraser;
+if (eraserReceiver.latest(eraser)) {
+  // Use eraser.cx and eraser.cy in your existing movement logic.
+} else {
+  // Call your motor driver's stop function.
+}
+```
+
+`latest()` returns false when Python reports target loss or 500 ms pass without a fresh position. Your sketch can still write ultrasonic readings to the same port. If the main sketch already reads complete serial lines, pass each line to `eraserReceiver.acceptLine(line)` from that reader and omit the separate `poll()` call.
+
 ### Teach the pickup spot
 
 1. Fix the ESP32-CAM to the chassis on its centerline and aim it at the floor in front of the gripper. Keep the car parked with motor power off during setup.
