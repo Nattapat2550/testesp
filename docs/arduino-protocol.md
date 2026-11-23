@@ -4,6 +4,8 @@ The Python adapter implements this proposal for integration with the Arduino tea
 
 The [HC-SR04 bench sketch](../arduino/hcsr04_telemetry/hcsr04_telemetry.ino) sends the distance messages below over USB at 115200 baud. It supports a classic ESP32 DevKit through Arduino IDE's ESP32 Dev Module target and Uno or classic Nano through the AVR targets. It uses `pulseIn` with a 30 ms timeout. For the motor firmware, schedule range measurement so echo timing and serial output leave time for the command parser and watchdog.
 
+Set `ENABLE_COMMAND_BENCH` to `1` on the ESP32 to enable the serial command test. The bench acknowledges accepted commands, prints simulated commands as `type: bench`, and reports simulated arm completion. It allows a manual pause after the initial `STOP` and runs a 500 ms watchdog during simulated motion or an arm action. Real actuator firmware should implement the watchdog and completion semantics below using the actual motor and arm states.
+
 ## Framing and timing
 
 Use UTF-8 JSON objects terminated by `\n` over a serial port, initially 115200 baud, 8 data bits, no parity, and one stop bit. Keep each line at or below 1024 bytes. Send telemetry promptly so the host can use its receipt time and the sample age. The Python adapter faults on a receive backlog above 4096 bytes. It ignores housekeeping text and unknown message types. New host sessions start at `seq: 1` with `STOP`. Clear stale input on session startup and keep actuators stopped at startup and after reset.

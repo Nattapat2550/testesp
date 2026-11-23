@@ -71,6 +71,22 @@ For the separate ESP32-CAM, pass its actual MJPEG URL and select the eraser pres
 
 In the preview, show the eraser to the camera and move a flat object toward or away from the HC-SR04. Look for the `black-eraser` box and a changing `Beam … cm` reading. `IDLE` is expected while you test telemetry. The beam reading is the sensor's echo, which can come from another surface. Align and calibrate the sensor relative to the camera before using that reading for pickup.
 
+## Test commands on the ESP32
+
+Python decides when to send `TURN`, `MOVE`, `STOP`, or an arm action. The ESP32 receives those commands over USB and returns an acknowledgment with the same sequence number. The sketch's command bench simulates base and arm state so you can test this exchange with just the ESP32.
+
+1. Install **ArduinoJson 7** in Arduino IDE's Library Manager. Open [the sketch](arduino/hcsr04_telemetry/hcsr04_telemetry.ino), set `ENABLE_COMMAND_BENCH` to `1`, and upload with **ESP32 Dev Module** selected. [ArduinoJson installation guide](https://arduinojson.org/v7/how-to/install-arduinojson/)
+2. Close the Python preview if open. Open Serial Monitor at **115200 baud**, select **Newline**, and send each line below separately.
+
+```json
+{"type":"cmd","seq":1,"command":"STOP","linear":0,"angular":0}
+{"type":"cmd","seq":2,"command":"TURN","linear":0,"angular":0.2}
+```
+
+Look for `"type":"ack"` with `"accepted":true`, followed by a `"type":"bench"` line showing the simulated command. Once simulated movement starts, the bench watchdog stops it after 500 ms without an accepted command or `HEARTBEAT`. To test the arm message, send the `STOP` line again and then send the second line with `"command":"GRAB"` and `"angular":0`. Look for a `done` message for sequence 2.
+
+The bench only updates simulated actuator state. Real motion requires the actuator wiring and driver code. Connect the receiver to that code so base commands set motor speed, `STOP` disables movement, and each arm action reports `done` after its physical completion. [Arduino command and watchdog contract](docs/arduino-protocol.md)
+
 ## Range input and calibration
 
 The serial adapter shares a port for command exchange and range telemetry. `--source 0 --serial-port COM3 --distance serial --display` opens a telemetry-only session with a mock command link. In the preview, `beam` shows the latest valid raw echo. Without a port or network endpoint, a camera session has unknown range.

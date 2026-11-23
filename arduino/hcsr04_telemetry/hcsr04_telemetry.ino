@@ -1,5 +1,18 @@
 #include <Arduino.h>
 
+// Set to 1 to test incoming commands on the ESP32 without connecting actuators.
+#ifndef ENABLE_COMMAND_BENCH
+#define ENABLE_COMMAND_BENCH 0
+#endif
+
+#if ENABLE_COMMAND_BENCH
+#if !defined(ARDUINO_ESP32_DEV)
+#error "The command bench uses the ESP32 Dev Module target."
+#endif
+#include "bench_commands.h"
+BenchCommands benchCommands(Serial);
+#endif
+
 #if defined(ARDUINO_ESP32_DEV)
 constexpr uint8_t TRIG_PIN = 25;
 constexpr uint8_t ECHO_PIN = 26;
@@ -23,6 +36,9 @@ void setup() {
 }
 
 void loop() {
+#if ENABLE_COMMAND_BENCH
+  benchCommands.poll();
+#endif
   const unsigned long now = millis();
   if (now - lastTriggerMs < SAMPLE_INTERVAL_MS) {
     delay(1);
