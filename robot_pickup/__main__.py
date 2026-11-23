@@ -77,7 +77,10 @@ def _run_camera(args: argparse.Namespace, config: Config, source: CameraSource, 
         if distance_kind == "serial":
             provider: DistanceProvider = serial
         elif distance_kind == "http":
-            http = HTTPDistance(args.distance_url, config.runtime.http_timeout_s, config.runtime.http_poll_s)
+            url = config.distance.http_url
+            if url is None:
+                raise ValueError("set distance.http_url in the project configuration to use HTTP distance")
+            http = HTTPDistance(url, config.runtime.http_timeout_s, config.runtime.http_poll_s)
             http.start()
             stack.callback(http.close)
             provider = http
@@ -140,20 +143,21 @@ def main(argv: list[str] | None = None) -> int:
     inputs = parser.add_mutually_exclusive_group()
     inputs.add_argument("--simulate", action="store_true", help="run the built-in simulation (default without a source)")
     inputs.add_argument("--source", help="webcam index, HTTP/MJPEG URL, or local video file")
-    parser.add_argument("--config", type=Path, help="JSON settings file (see config/pickup.example.json)")
+    parser.add_argument("--config", type=Path, help="JSON settings file inside config/ (see config/pickup.example.json)")
     parser.add_argument("--display", action="store_true", help="show the OpenCV preview; press Q or Esc to exit")
     parser.add_argument("--position-only", action="store_true", help="output target coordinates as JSON, with optional serial output")
     parser.add_argument("--activate", action="store_true", help="start the controller once a camera frame arrives")
     parser.add_argument("--hardware", action="store_true", help="send commands to a serial Arduino instead of the mock")
     parser.add_argument("--serial-port", help="Arduino port, e.g. COM3 or /dev/ttyACM0")
     parser.add_argument("--distance", choices=("serial", "http", "none"), help="range telemetry source")
-    parser.add_argument("--distance-url", help="timestamped JSON range endpoint")
+    parser.add_argument("--distance-url", help="use HTTP distance with the URL already configured in distance.http_url")
     parser.add_argument("--verbose", action="store_true", help="include command transmissions in logs")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s %(message)s")
 
     try:
-        if args.position_only and (args.source is None or args.activate or args.hardware or args.distance or args.distance_url):
+        if args.position_only and (args.source is None or args.activate or args.hardware
+                                   or args.distance or args.distance_url is not None):
             parser.error("use --position-only with --source and optional --serial-port, without activation or distance options")
         config_path = args.config
         if (config_path is None and args.source is not None and not (args.activate or args.hardware)
@@ -163,18 +167,20 @@ def main(argv: list[str] | None = None) -> int:
                 config_path = eraser_preset
         config = load_config(config_path)
         if args.source is None:
-            if args.hardware or args.serial_port or args.distance or args.distance_url:
+            if args.hardware or args.serial_port or args.distance or args.distance_url is not None:
                 parser.error("camera source is required for hardware and external distance options")
             return _run_simulation(config, args.display)
 
         source = CameraSource.parse(args.source)
         if args.position_only:
             return run_position_output(config, source, args.display, args.serial_port)
-        distance_kind = args.distance or ("http" if args.distance_url else "serial" if args.serial_port else "none")
+        distance_kind = args.distance or ("http" if args.distance_url is not None else "serial" if args.serial_port else "none")
         if distance_kind == "serial" and not args.serial_port:
             parser.error("serial distance requires --serial-port")
-        if (distance_kind == "http") != bool(args.distance_url):
-            parser.error("HTTP distance requires --distance-url")
+        if args.distance_url is not None and (distance_kind != "http" or args.distance_url != config.distance.http_url):
+            parser.error("--distance-url must match distance.http_url in your project configuration")
+        if distance_kind == "http" and config.distance.http_url is None:
+            parser.error("set distance.http_url in your project configuration to use HTTP distance")
         if args.serial_port and not args.hardware and distance_kind != "serial":
             parser.error("--serial-port requires --hardware or serial distance telemetry")
         if args.hardware:

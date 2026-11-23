@@ -4,13 +4,15 @@
 
 ## Install and run
 
-Use Python 3.10 or newer in a virtual environment. Run the commands from the repository root.
+Use Python 3.10 or newer. Run these commands from the repository root to install the locked dependencies and run the simulation and tests.
 
 ```sh
-python -m pip install -e .
-python -m robot_pickup --simulate
-python -m unittest discover -s tests -v
+uv sync --locked
+uv run --locked python -m robot_pickup --simulate
+uv run --locked python -m unittest discover -s tests -v
 ```
+
+Include `--extra yolo` for eraser detection with `best.pt` and `--extra serial` for Arduino USB communication when syncing. Activate `.venv` for the `python` commands below. [uv lock and sync guide](https://docs.astral.sh/uv/concepts/projects/sync/)
 
 The simulation draws a colored object, updates its position and apparent size based on mock motion, and produces gripper feedback from simulated contact. Add `--display` for a live OpenCV window or `--verbose` to log command transmissions. The window shows object IDs, centers, bounding boxes, the selected target and its associated distance, the current state, and the last base command. Use `Q`, `Esc`, or `Ctrl+C` to exit.
 
@@ -24,7 +26,7 @@ For the ESP32-CAM, pass the board's actual HTTP/MJPEG URL to `--source`. Espress
 
 Camera sessions start in `IDLE`. Add `--activate` to exercise the controller with the mock Arduino. Add `--config config/pickup.example.json` to load the example settings, which detect red and green objects and select red. An empty `target.labels` list allows any detected label. `target.strategy` accepts `centered` or `largest`. HSV detections have no confidence score. Configure hue as `0–179` and saturation and value as `0–255` under `perception.colors`. The two red ranges handle hue wraparound.
 
-With the optional YOLO extra installed and `best.pt` present, a plain webcam preview from the repository root uses the eraser preset. The window title shows the active detector. Install the extra with `python -m pip install -e '.[yolo]'`. You can also load the preset explicitly for a webcam, recorded video, or ESP32-CAM stream.
+With the optional YOLO extra installed and `best.pt` present, a plain webcam preview from the repository root uses the eraser preset. The window title shows the active detector. You can also load the preset explicitly for a webcam, recorded video, or ESP32-CAM stream.
 
 ```sh
 python -m robot_pickup --source 0 --display --config config/eraser.example.json
@@ -136,7 +138,11 @@ The bench only updates simulated actuator state. Real motion requires the actuat
 
 The serial adapter shares a port for command exchange and range telemetry. `--source 0 --serial-port COM3 --distance serial --display` opens a telemetry-only session with a mock command link. In the preview, `beam` shows the latest valid raw echo. Without a port or network endpoint, a camera session has unknown range.
 
-For network telemetry, use `--distance http --distance-url http://192.168.1.51/distance`. The endpoint returns JSON in the following shape. Set `measured_at` to the actual Unix timestamp in seconds at acquisition, using a clock synchronized with the Python host. A repeated timestamp does not refresh the reading. Use `"valid": false` and `"distance_cm": null` for a timeout or no echo.
+For network telemetry, copy `config/pickup.example.json` to `config/pickup.local.json` and set `distance.http_url` to your approved sensor endpoint, for example `http://192.168.1.51/distance`. Run from the repository root with `--config config/pickup.local.json --distance http`. Keep custom JSON settings inside `config/` and make sure any links resolve within that directory.
+
+The HTTP adapter connects directly to the configured endpoint and treats redirects as failed readings. The optional `--distance-url` must match `distance.http_url` exactly.
+
+Set `measured_at` to the actual Unix timestamp in seconds at acquisition, using a clock synchronized with the Python host. A repeated timestamp does not refresh the reading. Use `"valid": false` and `"distance_cm": null` for a timeout or no echo.
 
 ```json
 {"distance_cm": 24.8, "valid": true, "measured_at": 1795424400.25}
@@ -151,7 +157,7 @@ Only the selected, visible object can receive a distance estimate. It must cover
 
 ## Arduino integration
 
-Install the optional serial dependency with `python -m pip install -e '.[serial]'`. Once the Arduino team implements or maps the protocol and has tested its independent watchdog, run a hardware session with a calibrated copy of the configuration.
+Include `--extra serial` when syncing the environment for Arduino integration. Once the Arduino team implements or maps the protocol and has tested its independent watchdog, run a hardware session with a calibrated copy of the configuration.
 
 ```sh
 python -m robot_pickup --source http://192.168.1.50:81/stream --config config/pickup.local.json --hardware --activate --serial-port COM3 --distance serial --display

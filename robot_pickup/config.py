@@ -93,10 +93,32 @@ def _parse_float(value: str) -> float:
     return number
 
 
+def _config_file(path: Path) -> Path:
+    project = Path.cwd()
+    config_dir = project / "config"
+    candidate = project / path
+    message = "configuration must be a JSON file inside the project's config/ directory"
+    if not candidate.is_relative_to(config_dir) or candidate.suffix.lower() != ".json":
+        raise ValueError(message)
+    if any(part == ".." or ":" in part for part in candidate.relative_to(config_dir).parts):
+        raise ValueError(message)
+
+    try:
+        root = config_dir.resolve(strict=True)
+        if root != project.resolve() / "config":
+            raise ValueError(message)
+        resolved = candidate.resolve(strict=True)
+    except RuntimeError as exc:
+        raise ValueError(message) from exc
+    if not resolved.is_relative_to(root) or resolved.suffix.lower() != ".json" or not resolved.is_file():
+        raise ValueError(message)
+    return resolved
+
+
 def load_config(path: Path | None) -> Config:
     if path is None:
         return Config()
-    with path.open(encoding="utf-8-sig") as file:
+    with _config_file(path).open(encoding="utf-8-sig") as file:
         data = json.load(file, parse_constant=_reject_constant, parse_float=_parse_float)
     if not isinstance(data, dict) or data.keys() - Config.__dataclass_fields__.keys():
         raise ValueError("unknown or invalid configuration section")

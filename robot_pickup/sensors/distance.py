@@ -1,14 +1,14 @@
 import json
 import logging
 from collections import deque
+from contextlib import closing
 from dataclasses import dataclass
-from http.client import HTTPException
+from http.client import HTTPConnection, HTTPException, HTTPSConnection
 from statistics import median
 from threading import Event, Thread
 from time import monotonic, time
 from typing import Callable, Protocol
-from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.parse import SplitResult, urlsplit
 
 from robot_pickup.models import DistanceReading, DistanceSample, finite_number, is_fresh
 
@@ -46,12 +46,15 @@ class DistanceSettings:
     max_cm: float = 400.0
     max_age_s: float = 0.35
     median_window: int = 3
+    http_url: str | None = None
 
     def __post_init__(self) -> None:
         if not 0 < self.min_cm < self.max_cm or not 0 < self.max_age_s:
             raise ValueError("invalid distance or freshness limits")
         if type(self.median_window) is not int or self.median_window < 1:
             raise ValueError("median_window must be a positive integer")
+        if self.http_url is not None:
+            _http_endpoint(self.http_url)
 
 
 class FilteredDistance:
@@ -93,16 +96,33 @@ def parse_distance(payload: dict[str, object], measured_at: float) -> DistanceSa
                           "" if valid else "invalid distance telemetry")
 
 
+def _http_endpoint(url: str) -> SplitResult:
+    message = "distance endpoint must be an HTTP or HTTPS URL without credentials or a fragment"
+    if not isinstance(url, str) or not all("!" <= char <= "~" for char in url) or "\\" in url or "#" in url:
+        raise ValueError(message)
+    try:
+        endpoint = urlsplit(url)
+        port = endpoint.port
+    except ValueError as exc:
+        raise ValueError(message) from exc
+    host = endpoint.hostname
+    if endpoint.scheme not in ("http", "https") or not host or "%" in host or port == 0:
+        raise ValueError(message)
+    authority = f"[{host}]" if ":" in host else host
+    if port is not None:
+        authority += f":{port}"
+    if endpoint.netloc.lower() != authority:
+        raise ValueError(message)
+    return endpoint
+
+
 class HTTPDistance:
     """Poll a timestamped JSON endpoint without blocking the controller."""
 
     def __init__(self, url: str, timeout_s: float = 0.25, interval_s: float = 0.1) -> None:
-        parsed = urlsplit(url)
-        if parsed.scheme not in ("http", "https") or not parsed.hostname:
-            raise ValueError("distance URL must be an HTTP or HTTPS endpoint")
+        self._endpoint = _http_endpoint(url)
         if not 0 < timeout_s or not 0 < interval_s:
             raise ValueError("HTTP timeout and poll interval must be positive")
-        self._request = Request(url, headers={"Accept": "application/json", "Cache-Control": "no-cache"})
         self._timeout = timeout_s
         self._interval = interval_s
         self._samples: tuple[DistanceSample | None, DistanceSample | None] = None, None
@@ -136,12 +156,26 @@ class HTTPDistance:
         self._last_source_timestamp = timestamp
         self._publish(parse_distance(payload, now - (wall_time - timestamp)))
 
+    def _read_body(self) -> bytes:
+        endpoint = self._endpoint
+        connection_type = HTTPSConnection if endpoint.scheme == "https" else HTTPConnection
+        port = endpoint.port or connection_type.default_port
+        path = endpoint.path or "/"
+        if endpoint.query:
+            path += "?" + endpoint.query
+        # Connect directly to the configured endpoint and reject redirects.
+        with closing(connection_type(endpoint.hostname, port, timeout=self._timeout)) as connection:
+            connection.request("GET", path, headers={"Accept": "application/json", "Cache-Control": "no-cache"})
+            with connection.getresponse() as response:
+                if not 200 <= response.status < 300:
+                    raise HTTPException(f"distance endpoint returned HTTP {response.status}")
+                return response.read(4097)
+
     def _run(self) -> None:
         while not self._stop.is_set():
             previous = self._samples[0]
             try:
-                with urlopen(self._request, timeout=self._timeout) as response:
-                    body = response.read(4097)
+                body = self._read_body()
                 if len(body) > 4096:
                     raise ValueError("oversized distance response")
                 self._receive(json.loads(body), monotonic(), time())

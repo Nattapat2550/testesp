@@ -32,7 +32,8 @@
     "min_cm": 2.0,
     "max_cm": 400.0,
     "max_age_s": 0.35,
-    "median_window": 3
+    "median_window": 3,
+    "http_url": null
   },
   "beam": {
     "calibrated": false,

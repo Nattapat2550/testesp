@@ -1,9 +1,37 @@
 import unittest
 from dataclasses import replace
+from http.client import HTTPException
+from unittest.mock import patch
 
 from robot_pickup.models import BoundingBox, Detection, DistanceReading, DistanceSample, Scene
 from robot_pickup.sensors.association import BeamAssociation, BeamSettings
 from robot_pickup.sensors.distance import DistanceSettings, FilteredDistance, HTTPDistance
+
+
+class HTTPEndpointTests(unittest.TestCase):
+    def test_rejects_unsupported_urls_and_credentials(self):
+        for url in ("ftp://sensor.local/distance", "http://user@sensor.local/distance",
+                    "http://sensor.local:0/distance", "https://sensor.local/distance#notes",
+                    " http://sensor.local/distance"):
+            with self.subTest(url=url), self.assertRaises(ValueError):
+                DistanceSettings(http_url=url)
+
+    def test_redirect_response_does_not_open_another_connection(self):
+        provider = HTTPDistance("http://127.0.0.1:8080/distance?unit=cm")
+        with patch("robot_pickup.sensors.distance.HTTPConnection") as connect:
+            connection = connect.return_value
+            response = connection.getresponse.return_value.__enter__.return_value
+            response.status = 302
+
+            with self.assertRaisesRegex(HTTPException, "302"):
+                provider._read_body()
+
+            connect.assert_called_once_with("127.0.0.1", 8080, timeout=0.25)
+            connection.request.assert_called_once_with(
+                "GET", "/distance?unit=cm", headers={"Accept": "application/json", "Cache-Control": "no-cache"},
+            )
+            response.read.assert_not_called()
+            connection.close.assert_called_once()
 
 
 class MutableDistance:
