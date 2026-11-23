@@ -1,0 +1,83 @@
+{
+  "camera": {
+    "open_timeout_ms": 3000,
+    "read_timeout_ms": 1000,
+    "startup_timeout_s": 8.0
+  },
+  "perception": {
+    "backend": "hsv",
+    "colors": {
+      "red": [
+        {"low": [0, 110, 75], "high": [10, 255, 255]},
+        {"low": [170, 110, 75], "high": [179, 255, 255]}
+      ],
+      "green": [
+        {"low": [40, 90, 60], "high": [85, 255, 255]}
+      ]
+    },
+    "min_area_px": 100,
+    "max_area_fraction": 0.55,
+    "morphology_size": 3,
+    "max_displacement": 0.22,
+    "track_gap_s": 0.70,
+    "yolo_weights": "best.pt",
+    "yolo_confidence": 0.5
+  },
+  "target": {
+    "labels": ["red"],
+    "strategy": "centered",
+    "min_confidence": 0.5
+  },
+  "distance": {
+    "min_cm": 2.0,
+    "max_cm": 400.0,
+    "max_age_s": 0.35,
+    "median_window": 3,
+    "http_url": null
+  },
+  "beam": {
+    "calibrated": false,
+    "center_x": 0.0,
+    "center_y": 0.0,
+    "half_width": 0.12,
+    "half_height": 0.20,
+    "max_skew_s": 0.18
+  },
+  "control": {
+    "center_tolerance": 0.06,
+    "realign_tolerance": 0.12,
+    "max_linear": 0.30,
+    "max_angular": 0.42,
+    "search_angular": 0.0,
+    "turn_gain": 1.8,
+    "approach_gain_per_cm": 0.05,
+    "pickup_cm": 12.0,
+    "pickup_window_cm": 3.0,
+    "resume_margin_cm": 1.0,
+    "settle_s": 0.10,
+    "pickup_samples": 2,
+    "frame_timeout_s": 0.40,
+    "target_timeout_s": 0.65,
+    "search_timeout_s": 8.0,
+    "motion_timeout_s": 12.0,
+    "pickup_timeout_s": 8.0,
+    "verify_timeout_s": 1.0,
+    "require_range_for_turn": true,
+    "pickup_sequence": ["LOWER", "GRAB", "LIFT"]
+  },
+  "link": {
+    "ack_timeout_s": 0.35,
+    "heartbeat_s": 0.12
+  },
+  "serial": {
+    "baudrate": 115200,
+    "write_timeout_s": 0.05,
+    "startup_s": 2.0,
+    "combined_velocity": false
+  },
+  "runtime": {
+    "tick_hz": 30.0,
+    "http_poll_s": 0.10,
+    "http_timeout_s": 0.25
+  }
+}
