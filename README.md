@@ -44,7 +44,7 @@ Replace `0` with the ESP32-CAM MJPEG URL to use the separate camera. Add `--seri
 
 Each line reports the selected eraser's center. `cx` and `cy` run from −1 to +1. The image center is `(0, 0)`, x increases to the right, and y increases downward. `x_px` and `y_px` give the same position in pixels. See the [target position message format](docs/arduino-protocol.md#target-position-output) for the Arduino implementation.
 
-Open the [ESP32 target receiver example](arduino/esp32_target_receiver/esp32_target_receiver.ino) in Arduino IDE with ArduinoJson 7 installed. It prints the next movement decision, including `STOP` when data is lost. See [how to try it in Serial Monitor](docs/arduino-protocol.md#esp32-receiver-example).
+Open the [ESP32 target receiver example](arduino/esp32_target_receiver/esp32_target_receiver.ino) in Arduino IDE with ArduinoJson 7 installed. It prints the next movement decision, including `STOP` when data is lost. See the [sample Python and ESP32 output](docs/arduino-protocol.md#example-output).
 
 ### Teach the pickup spot
 

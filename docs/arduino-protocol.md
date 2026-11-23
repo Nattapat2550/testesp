@@ -79,4 +79,26 @@ The [target receiver sketch](../arduino/esp32_target_receiver/esp32_target_recei
 
 The sketch prints a decision when it changes. The target expires after 500 ms without a fresh message. Close Serial Monitor before running Python with `--position-only --serial-port` so Python can open that port.
 
+### Example output
+
+In the Python terminal, a run using `--position-only --serial-port COM3` can look like this as the eraser comes into view and then disappears.
+
+```text
+INFO Target position output using YOLO (best.pt)
+INFO Sending target positions on COM3 at 115200 baud
+{"type":"target","found":false}
+{"type":"target","found":true,"label":"black-eraser","object_id":1,"confidence":0.75,"cx":0.3,"cy":0.4,"x_px":416.0,"y_px":336.0,"frame_width":640,"frame_height":480}
+{"type":"target","found":false}
+```
+
+Python writes the JSON lines to USB. To see the ESP32's reply in Serial Monitor, close Python, open the monitor at **115200 baud** with **Newline** selected, and send just the `found:true` line from the example above. With the sketch's example pickup point `(0.10, 0.40)`, you can see this sequence.
+
+```text
+STOP
+TURN_RIGHT
+STOP
+```
+
+The first `STOP` is the sketch waiting for a target. `TURN_RIGHT` comes from `cx` being 0.20 to the right of the pickup point. The final `STOP` appears after 500 ms without a fresh target message.
+
 For the motor firmware, replace the example pickup coordinates with the values you taught. The example assumes floor targets move lower in the image as the car approaches. Verify this on the mounted camera and check clearance before driving. Connect the decisions to the actual motor driver and arm code. On `READY_TO_PICK`, stop the base and start the grasp once, then wait for the grasp to finish before accepting another pickup.
