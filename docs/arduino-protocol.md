@@ -65,3 +65,18 @@ With `--position-only`, Python publishes a `target` message to the terminal and 
 - The message supplies an image position. The ESP32 firmware owns its motor and gripper decisions and can read the ultrasonic sensor directly for approach distance.
 
 Press **P** in the position preview with the eraser at the gripper's reachable spot. The saved `pickup-point.json` contains `pickup_cx` and `pickup_cy` for the current camera mount. Copy those values into the ESP32 firmware. The image-space correction is `cx - pickup_cx` and `cy - pickup_cy`. Measure the allowed error and check the wheel directions on the robot before running the grasp. The saved point is local to the PC and the target stream keeps its existing fields.
+
+### ESP32 receiver example
+
+The [target receiver sketch](../arduino/esp32_target_receiver/esp32_target_receiver.ino) reads the USB messages and prints its decisions. Install ArduinoJson 7, select **ESP32 Dev Module** in Arduino IDE, and upload the sketch for a bench test. Open Serial Monitor with **115200 baud** and **Newline** selected. With the example pickup point `(0.10, 0.40)`, send these lines one at a time. [ArduinoJson installation guide](https://arduinojson.org/v7/how-to/install-arduinojson/)
+
+| Serial input | Expected decision |
+| --- | --- |
+| `{"type":"target","found":true,"cx":0.30,"cy":0.40}` | `TURN_RIGHT` |
+| `{"type":"target","found":true,"cx":0.11,"cy":0.20}` | `APPROACH` |
+| `{"type":"target","found":true,"cx":0.11,"cy":0.39}` | `READY_TO_PICK` |
+| `{"type":"target","found":false}` | `STOP` |
+
+The sketch prints a decision when it changes. The target expires after 500 ms without a fresh message. Close Serial Monitor before running Python with `--position-only --serial-port` so Python can open that port.
+
+For the motor firmware, replace the example pickup coordinates with the values you taught. The example assumes floor targets move lower in the image as the car approaches. Verify this on the mounted camera and check clearance before driving. Connect the decisions to the actual motor driver and arm code. On `READY_TO_PICK`, stop the base and start the grasp once, then wait for the grasp to finish before accepting another pickup.
