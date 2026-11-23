@@ -2,7 +2,7 @@
 
 The Python adapter implements this proposal for integration with the Arduino team's firmware. Agree on the final wire format and actuator semantics before enabling hardware control. Firmware work belongs on the Arduino side.
 
-The [HC-SR04 bench sketch](../arduino/hcsr04_telemetry/hcsr04_telemetry.ino) sends the distance messages below over USB at 115200 baud. It uses `pulseIn` with a 30 ms timeout. For the motor firmware, schedule range measurement so echo timing and serial output leave time for the command parser and watchdog.
+The [HC-SR04 bench sketch](../arduino/hcsr04_telemetry/hcsr04_telemetry.ino) sends the distance messages below over USB at 115200 baud. It supports a classic ESP32 DevKit through Arduino IDE's ESP32 Dev Module target and Uno or classic Nano through the AVR targets. It uses `pulseIn` with a 30 ms timeout. For the motor firmware, schedule range measurement so echo timing and serial output leave time for the command parser and watchdog.
 
 ## Framing and timing
 

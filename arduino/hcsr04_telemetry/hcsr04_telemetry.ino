@@ -1,7 +1,14 @@
 #include <Arduino.h>
 
+#if defined(ARDUINO_ESP32_DEV)
+constexpr uint8_t TRIG_PIN = 25;
+constexpr uint8_t ECHO_PIN = 26;
+#elif defined(ARDUINO_ARCH_ESP32)
+#error "Select ESP32 Dev Module for the classic ESP32 DevKit pin mapping used by this sketch."
+#else
 constexpr uint8_t TRIG_PIN = 7;
 constexpr uint8_t ECHO_PIN = 8;
+#endif
 constexpr unsigned long SAMPLE_INTERVAL_MS = 100;
 constexpr unsigned long ECHO_TIMEOUT_US = 30000;
 
@@ -18,6 +25,7 @@ void setup() {
 void loop() {
   const unsigned long now = millis();
   if (now - lastTriggerMs < SAMPLE_INTERVAL_MS) {
+    delay(1);
     return;
   }
   lastTriggerMs = now;

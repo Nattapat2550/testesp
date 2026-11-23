@@ -32,26 +32,44 @@ python -m robot_pickup --source 0 --display --config config/eraser.example.json
 
 For other YOLO models, set `perception.yolo_weights` and `target.labels` in your configuration. Preview on a camera or video before using a model for control.
 
-## Test the HC-SR04 with the webcam
+## Test the HC-SR04 with a camera
 
-With the Arduino unplugged, wire a standard 5 V HC-SR04 to an Arduino Uno R3 or classic 5 V Nano. Keep motor power disconnected during this bench test. For a 3.3 V board, use a suitable voltage supply and level-shift the 5 V `ECHO` signal before wiring it to a GPIO input. [HC-SR04 datasheet](https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf) · [Arduino board voltages](https://docs.arduino.cc/learn/hardware/nano-pcb-guide/)
+With USB unplugged and motor power disconnected, wire a standard 5 V HC-SR04 to your bench board. The ESP32 pin mapping is for a classic ESP32 DevKit or ESP32-WROOM-32 development board. Use the 5 V rail exposed by your board while powered over USB. The HC-SR04 `ECHO` output is 5 V and requires a divider before it reaches the ESP32 input. [ESP32 DevKitC pinout](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32/esp32-devkitc/user_guide.html) · [HC-SR04 pinout and logic levels](https://learn.adafruit.com/ultrasonic-sonar-distance-sensors/pinouts)
 
-| HC-SR04 pin | 5 V Arduino pin |
-| --- | --- |
-| `VCC` | `5V` |
-| `TRIG` | `D7` |
-| `ECHO` | `D8` |
-| `GND` | `GND` |
+| HC-SR04 pin | ESP32 DevKit | 5 V Uno R3 or classic Nano |
+| --- | --- | --- |
+| `VCC` | `5V` | `5V` |
+| `TRIG` | `GPIO25` | `D7` |
+| `ECHO` | `GPIO26` through a voltage divider | `D8` |
+| `GND` | `GND` | `GND` |
 
-1. Plug the Arduino into the PC with a USB data cable. Open [the telemetry sketch](arduino/hcsr04_telemetry/hcsr04_telemetry.ino) in Arduino IDE, select your board and COM port, and click **Upload**. The sketch uses the built-in Arduino library.
+For the ESP32, connect `ECHO` to `GPIO26` through a **2.2 kΩ** resistor. Connect **3.3 kΩ** from `GPIO26` to `GND`. This divides a 5 V echo to about 3.0 V at the GPIO. The sketch belongs on the ESP32 DevKit connected to the sensor. [ESP32 electrical specifications](https://documentation.espressif.com/esp32_datasheet_en.pdf)
+
+### ESP32 setup in Arduino IDE
+
+Add the following URL under **File → Preferences → Additional Boards Manager URLs**. In **Boards Manager**, install **esp32 by Espressif Systems**. Select **ESP32 Dev Module** for the classic DevKit or ESP32-WROOM-32 development board. [Espressif Arduino IDE installation guide](https://docs.espressif.com/projects/arduino-esp32/en/latest/installing.html)
+
+```text
+https://espressif.github.io/arduino-esp32/package_esp32_index.json
+```
+
+### Upload and test
+
+1. Plug the board into the PC with a USB data cable. Open [the telemetry sketch](arduino/hcsr04_telemetry/hcsr04_telemetry.ino) in Arduino IDE, select your board and COM port, and click **Upload**. The sketch uses the board's Arduino core.
 2. Open **Serial Monitor** at **115200 baud**. Aim the sensor at a flat object about 20 cm away and look for lines with `"type":"distance"`, `"valid":true`, and a distance near 20. The sketch reports an invalid sample when the echo times out.
-3. Close Serial Monitor to free the COM port for Python. Run the command below from the project root, substituting the port shown in Arduino IDE. [Arduino serial port troubleshooting](https://support.arduino.cc/hc/en-us/articles/4407830972050-Find-and-stop-process-blocking-a-port)
+3. Close Serial Monitor to free the COM port for Python. Run the webcam command below from the project root, substituting the sensor board's port shown in Arduino IDE. [Arduino serial port troubleshooting](https://support.arduino.cc/hc/en-us/articles/4407830972050-Find-and-stop-process-blocking-a-port)
 
 ```powershell
 .\.venv\Scripts\python.exe -m robot_pickup --source 0 --display --serial-port COM3 --distance serial
 ```
 
-In the preview, show the eraser to the webcam and move a flat object toward or away from the HC-SR04. Look for the `black-eraser` box and a changing `Beam … cm` reading. `IDLE` is expected while you test telemetry. The beam reading is the sensor's echo, which can come from another surface. Align and calibrate the sensor relative to the camera before using that reading for pickup.
+For the separate ESP32-CAM, pass its actual MJPEG URL and select the eraser preset. This example uses Espressif CameraWebServer's default stream path and an example board IP. The sensor board still connects by USB. [Espressif CameraWebServer source](https://github.com/espressif/arduino-esp32/blob/master/libraries/ESP32/examples/Camera/CameraWebServer/app_httpd.cpp)
+
+```powershell
+.\.venv\Scripts\python.exe -m robot_pickup --source http://192.168.1.50:81/stream --display --config config/eraser.example.json --serial-port COM3 --distance serial
+```
+
+In the preview, show the eraser to the camera and move a flat object toward or away from the HC-SR04. Look for the `black-eraser` box and a changing `Beam … cm` reading. `IDLE` is expected while you test telemetry. The beam reading is the sensor's echo, which can come from another surface. Align and calibrate the sensor relative to the camera before using that reading for pickup.
 
 ## Range input and calibration
 
