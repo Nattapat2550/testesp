@@ -39,25 +39,30 @@ For other YOLO models, set `perception.yolo_weights` and `target.labels` in your
 Use position-only mode when the Arduino firmware will decide how to move. With YOLO installed and `best.pt` in the project root, this mode selects the eraser preset by default. Run it from the project folder.
 
 ```powershell
-.\.venv\Scripts\python.exe -m robot_pickup --source 0 --position-only --display
+.\.venv\Scripts\python.exe -m robot_pickup --source http://192.168.1.50:81/stream --position-only --display --target-ip 192.168.1.51
 ```
 
-Replace `0` with the ESP32-CAM MJPEG URL to use the separate camera. Add `--serial-port COM3` with the ESP32 controller's actual port to send the same lines over USB at **115200 baud**. Close Serial Monitor while Python has the port open.
+### Run the robot without a USB data cable
+
+1. Connect the PC, ESP32-CAM, and controller ESP32 to the same trusted Wi-Fi network. In the [receiver sketch folder](arduino/esp32_target_receiver), copy `wifi_secrets.example.h` to `wifi_secrets.h` and fill in your Wi-Fi name and password. Git ignores `wifi_secrets.h`.
+2. Install **ArduinoJson 7**, open `esp32_target_receiver.ino` in Arduino IDE, and upload to the controller ESP32 over USB. Open Serial Monitor at **115200 baud** and copy the address printed after `Controller IP`. Keep the controller powered from the robot when you unplug USB.
+3. In the command above, replace `192.168.1.50:81/stream` with the ESP32-CAM stream address and `192.168.1.51` with the controller address. For a PC webcam bench test, use `--source 0`. Leave Python running while the robot uses live detections. If the router assigns the controller a different address later, update `--target-ip`.
+
+The receiver example prints decisions such as `TURN_RIGHT`, `APPROACH`, and `STOP`. You can leave Serial Monitor open during a USB-powered bench test because the positions arrive over Wi-Fi. For the original USB bench workflow, remove or rename the local `wifi_secrets.h` before uploading and swap `--target-ip 192.168.1.51` for `--serial-port COM3` in the Python command. Close Serial Monitor while Python uses that port. Omit both options for a preview with terminal output only.
 
 Each line reports the selected eraser's center. `cx` and `cy` run from −1 to +1. The image center is `(0, 0)`, x increases to the right, and y increases downward. `x_px` and `y_px` give the same position in pixels. See the [target position message format](docs/arduino-protocol.md#target-position-output) for the Arduino implementation.
 
-Open the [ESP32 target receiver example](arduino/esp32_target_receiver/esp32_target_receiver.ino) in Arduino IDE with ArduinoJson 7 installed. It prints the next movement decision, including `STOP` when data is lost. See the [sample Python and ESP32 output](docs/arduino-protocol.md#example-output).
-
 ### Include the receiver in your main Arduino sketch
 
-Copy [target_receiver.h](arduino/esp32_target_receiver/target_receiver.h) into the same folder as your main `.ino` file. Install ArduinoJson 7 in Arduino IDE. Add the include and receiver near the top of your `.ino`.
+Copy [target_receiver.h](arduino/esp32_target_receiver/target_receiver.h), [wifi_target_receiver.h](arduino/esp32_target_receiver/wifi_target_receiver.h), and your local `wifi_secrets.h` into the same folder as your main `.ino` file. Add these lines near the top of your sketch.
 
 ```cpp
-#include "target_receiver.h"
-TargetReceiver eraserReceiver(Serial);
+#include "wifi_target_receiver.h"
+#include "wifi_secrets.h"
+WiFiTargetReceiver eraserReceiver;
 ```
 
-Use `Serial.begin(115200);` once in your existing `setup()`. Then add this to your existing `loop()` before making a movement decision.
+Call `eraserReceiver.begin(WIFI_SSID, WIFI_PASSWORD);` in your existing `setup()`. Then add this to your existing `loop()` before making a movement decision.
 
 ```cpp
 eraserReceiver.poll();
@@ -72,13 +77,13 @@ if (eraserReceiver.latest(eraser) && eraser.hasPickupPoint) {
 }
 ```
 
-`latest()` returns false when Python reports target loss or 500 ms pass without a fresh position. Your sketch can still write ultrasonic readings to the same port. If the main sketch already reads complete serial lines, pass each line to `eraserReceiver.acceptLine(line)` from that reader and omit the separate `poll()` call.
+`latest()` returns false when Python reports target loss, Wi-Fi disconnects, or 500 ms pass without a fresh position. Keep calling `poll()` during normal operation so the ESP32 can keep the target current. Read the HC-SR04 in the same sketch for approach distance and connect the decisions to your actual motor and gripper code.
 
 ### Teach the pickup spot
 
 1. Fix the ESP32-CAM to the chassis on its centerline and aim it at the floor in front of the gripper. Keep the car parked with motor power off during setup.
 2. Put the eraser where the gripper can reach it from a repeatable arm pose. Mark that spot on the floor and put the arm in its driving pose so the camera can see the eraser.
-3. Run the position preview above with the mounted camera's MJPEG URL. Once it shows the eraser, focus the preview and press **P**. Python saves `pickup_cx` and `pickup_cy` to `pickup-point.json` in the project folder and includes them with the live positions when the source, frame size, and eraser label match. Use `--serial-port` to send them to the ESP32.
+3. Run the position preview above with the mounted camera's MJPEG URL. Once it shows the eraser, focus the preview and press **P**. Python saves `pickup_cx` and `pickup_cy` to `pickup-point.json` in the project folder and includes them with the live positions when the source, frame size, and eraser label match.
 4. Use `hasPickupPoint`, `pickupCx`, and `pickupCy` from the receiver to compare the live coordinates with the transmitted point. The example waits for both values before choosing a movement. Check the correction directions and tolerance on the assembled robot. Press **P** again after changing the camera mount or framing, or to update a point saved before the camera source was recorded.
 
 ## Test the HC-SR04 with a camera

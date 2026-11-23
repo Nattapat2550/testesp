@@ -2,6 +2,7 @@ import argparse
 import logging
 from contextlib import ExitStack
 from importlib.util import find_spec
+from ipaddress import IPv4Address
 from pathlib import Path
 from threading import Event
 from time import monotonic
@@ -145,10 +146,12 @@ def main(argv: list[str] | None = None) -> int:
     inputs.add_argument("--source", help="webcam index, HTTP/MJPEG URL, or local video file")
     parser.add_argument("--config", type=Path, help="JSON settings file inside config/ (see config/pickup.example.json)")
     parser.add_argument("--display", action="store_true", help="show the OpenCV preview; press Q or Esc to exit")
-    parser.add_argument("--position-only", action="store_true", help="output target coordinates as JSON, with optional serial output")
+    parser.add_argument("--position-only", action="store_true", help="output target coordinates as JSON over Wi-Fi or USB")
     parser.add_argument("--activate", action="store_true", help="start the controller once a camera frame arrives")
     parser.add_argument("--hardware", action="store_true", help="send commands to a serial Arduino instead of the mock")
-    parser.add_argument("--serial-port", help="Arduino port, e.g. COM3 or /dev/ttyACM0")
+    links = parser.add_mutually_exclusive_group()
+    links.add_argument("--serial-port", help="Arduino port, e.g. COM3 or /dev/ttyACM0")
+    links.add_argument("--target-ip", type=IPv4Address, help="Wi-Fi IPv4 address of the controller ESP32 in position-only mode")
     parser.add_argument("--distance", choices=("serial", "http", "none"), help="range telemetry source")
     parser.add_argument("--distance-url", help="use HTTP distance with the URL already configured in distance.http_url")
     parser.add_argument("--verbose", action="store_true", help="include command transmissions in logs")
@@ -156,9 +159,14 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s %(message)s")
 
     try:
+        if args.target_ip is not None and not args.position_only:
+            parser.error("--target-ip requires --position-only")
+        if args.target_ip is not None and (args.target_ip.is_unspecified or args.target_ip.is_multicast
+                                          or args.target_ip == IPv4Address("255.255.255.255")):
+            parser.error("--target-ip must be the controller ESP32's unicast IPv4 address")
         if args.position_only and (args.source is None or args.activate or args.hardware
                                    or args.distance or args.distance_url is not None):
-            parser.error("use --position-only with --source and optional --serial-port, without activation or distance options")
+            parser.error("use --position-only with --source and optional --target-ip or --serial-port, without activation or distance options")
         config_path = args.config
         if (config_path is None and args.source is not None and not (args.activate or args.hardware)
                 and (args.position_only or args.source.isdecimal())):
@@ -173,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
 
         source = CameraSource.parse(args.source)
         if args.position_only:
-            return run_position_output(config, source, args.display, args.serial_port)
+            return run_position_output(config, source, args.display, args.serial_port, target_ip=args.target_ip)
         distance_kind = args.distance or ("http" if args.distance_url is not None else "serial" if args.serial_port else "none")
         if distance_kind == "serial" and not args.serial_port:
             parser.error("serial distance requires --serial-port")

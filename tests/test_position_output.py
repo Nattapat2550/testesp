@@ -1,13 +1,17 @@
 import io
 import json
+import socket
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from time import monotonic
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from robot_pickup.__main__ import main
+from robot_pickup.config import load_config
 from robot_pickup.control.controller import TargetPolicy
 from robot_pickup.models import BoundingBox, Detection, Scene
 from robot_pickup.position_output import PickupPoint, PositionReporter, load_pickup_point, save_pickup_point
@@ -55,6 +59,36 @@ class PositionReporterTests(unittest.TestCase):
                 main(["--source", "0", "--position-only", "--hardware", "--activate"])
             self.assertEqual(error.exception.code, 2)
             run.assert_called_once()
+
+    def test_wifi_cli_sends_target_and_final_loss_as_separate_datagrams(self) -> None:
+        config = replace(load_config(None), target=TargetPolicy(labels=("black-eraser",)))
+        point = PickupPoint("black-eraser", 0.10, 0.40, 640, 480, "camera-a")
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.settimeout(1)
+            with (
+                patch("robot_pickup.__main__.load_config", return_value=config),
+                patch("robot_pickup.position_output.load_pickup_point", return_value=point),
+                patch("robot_pickup.position_output.CameraVision") as camera,
+                patch("robot_pickup.position_output.TARGET_UDP_PORT", listener.getsockname()[1]),
+                redirect_stdout(io.StringIO()),
+            ):
+                camera.return_value.latest = SimpleNamespace(scene=Scene(monotonic(), 640, 480, (self.eraser,)))
+                camera.return_value.finished.is_set.return_value = True
+                camera.return_value.error = None
+                self.assertEqual(main(["--source", "0", "--position-only", "--target-ip", "127.0.0.1"]), 0)
+            target = json.loads(listener.recv(512))
+            self.assertTrue(target["found"])
+            self.assertEqual((target["cx"], target["cy"], target["pickup_cx"], target["pickup_cy"]),
+                             (0.25, -0.5, 0.10, 0.40))
+            self.assertEqual(json.loads(listener.recv(512)), {"type": "target", "found": False})
+
+    def test_wifi_cli_requires_position_mode_and_excludes_serial(self) -> None:
+        wifi = ["--source", "0", "--target-ip", "192.168.1.51"]
+        for args in (wifi, [*wifi, "--position-only", "--serial-port", "COM3"]):
+            with self.subTest(args=args), redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                main(args)
+            self.assertEqual(error.exception.code, 2)
 
     def test_saves_a_fresh_pickup_point_and_preserves_it_when_target_is_missing_or_stale(self) -> None:
         scene = Scene(1.0, 640, 480, (self.eraser,))

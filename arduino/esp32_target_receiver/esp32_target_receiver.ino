@@ -3,7 +3,15 @@
 
 constexpr float POSITION_TOLERANCE = 0.03f;
 
+#if __has_include("wifi_secrets.h")
+#include "wifi_secrets.h"
+#include "wifi_target_receiver.h"
+WiFiTargetReceiver receiver;
+IPAddress lastAddress;
+#else
 TargetReceiver receiver(Serial);
+#endif
+
 const char* lastDecision = "";
 
 const char* decideMovement() {
@@ -35,10 +43,26 @@ const char* decideMovement() {
 
 void setup() {
   Serial.begin(115200);
+#if __has_include("wifi_secrets.h")
+  Serial.println("Joining Wi-Fi");
+  receiver.begin(WIFI_SSID, WIFI_PASSWORD);
+#endif
 }
 
 void loop() {
   receiver.poll();
+#if __has_include("wifi_secrets.h")
+  const IPAddress address = receiver.listeningAddress();
+  if (address != lastAddress) {
+    if (address == IPAddress()) {
+      Serial.println("Wi-Fi disconnected");
+    } else {
+      Serial.print("Controller IP: ");
+      Serial.println(address);
+    }
+    lastAddress = address;
+  }
+#endif
   const char* decision = decideMovement();
   if (std::strcmp(decision, lastDecision) != 0) {
     Serial.println(decision);

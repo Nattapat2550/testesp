@@ -2,10 +2,12 @@
 
 import json
 import logging
+import socket
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass
 from functools import partial
 from hashlib import sha256
+from ipaddress import IPv4Address
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from threading import Event
@@ -21,6 +23,7 @@ from robot_pickup.perception.camera import CameraSource, CameraVision
 
 LOG = logging.getLogger(__name__)
 PICKUP_POINT_PATH = Path("pickup-point.json")
+TARGET_UDP_PORT = 8765
 
 
 @dataclass(frozen=True)
@@ -149,7 +152,10 @@ class PositionReporter:
             self._found = False
 
 
-def run_position_output(config: Config, source: CameraSource, display: bool, serial_port: str | None) -> int:
+def run_position_output(
+    config: Config, source: CameraSource, display: bool, serial_port: str | None, *,
+    target_ip: IPv4Address | None = None,
+) -> int:
     backend = config.perception.backend.upper()
     if config.perception.backend == "yolo":
         backend += f" ({Path(config.perception.yolo_weights).name})"
@@ -160,6 +166,13 @@ def run_position_output(config: Config, source: CameraSource, display: bool, ser
 
     with ExitStack() as stack:
         serial = None
+        udp = None
+        wifi_send_failed = False
+        if target_ip is not None:
+            destination = (str(target_ip), TARGET_UDP_PORT)
+            udp = stack.enter_context(socket.socket(socket.AF_INET, socket.SOCK_DGRAM))
+            udp.setblocking(False)
+            LOG.info("Sending target positions to ESP32 %s:%d over Wi-Fi (UDP)", *destination)
         if serial_port is not None:
             settings = config.serial
             LOG.info("Sending target positions on %s at %d baud", serial_port, settings.baudrate)
@@ -168,8 +181,18 @@ def run_position_output(config: Config, source: CameraSource, display: bool, ser
             pace.wait(settings.startup_s)
 
         def emit(line: str) -> None:
+            nonlocal wifi_send_failed
             if serial is not None:
                 serial.write_line(line)
+            if udp is not None:
+                try:
+                    udp.sendto(line.encode("ascii"), destination)
+                except OSError as exc:
+                    if not wifi_send_failed:
+                        LOG.warning("Could not send target to ESP32 (%s)", exc)
+                    wifi_send_failed = True
+                else:
+                    wifi_send_failed = False
             print(line, flush=True)
 
         reporter = PositionReporter(config.target, config.control.frame_timeout_s, emit, load_pickup_point(camera_id))

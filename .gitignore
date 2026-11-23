@@ -10,6 +10,7 @@ __pycache__/
 .venv/
 venv/
 .env
+wifi_secrets.h
 
 # ผลรันของ YOLO
 runs/
