@@ -32,6 +32,27 @@ python -m robot_pickup --source 0 --display --config config/eraser.example.json
 
 For other YOLO models, set `perception.yolo_weights` and `target.labels` in your configuration. Preview on a camera or video before using a model for control.
 
+## Test the HC-SR04 with the webcam
+
+With the Arduino unplugged, wire a standard 5 V HC-SR04 to an Arduino Uno R3 or classic 5 V Nano. Keep motor power disconnected during this bench test. For a 3.3 V board, use a suitable voltage supply and level-shift the 5 V `ECHO` signal before wiring it to a GPIO input. [HC-SR04 datasheet](https://cdn.sparkfun.com/datasheets/Sensors/Proximity/HCSR04.pdf) · [Arduino board voltages](https://docs.arduino.cc/learn/hardware/nano-pcb-guide/)
+
+| HC-SR04 pin | 5 V Arduino pin |
+| --- | --- |
+| `VCC` | `5V` |
+| `TRIG` | `D7` |
+| `ECHO` | `D8` |
+| `GND` | `GND` |
+
+1. Plug the Arduino into the PC with a USB data cable. Open [the telemetry sketch](arduino/hcsr04_telemetry/hcsr04_telemetry.ino) in Arduino IDE, select your board and COM port, and click **Upload**. The sketch uses the built-in Arduino library.
+2. Open **Serial Monitor** at **115200 baud**. Aim the sensor at a flat object about 20 cm away and look for lines with `"type":"distance"`, `"valid":true`, and a distance near 20. The sketch reports an invalid sample when the echo times out.
+3. Close Serial Monitor to free the COM port for Python. Run the command below from the project root, substituting the port shown in Arduino IDE. [Arduino serial port troubleshooting](https://support.arduino.cc/hc/en-us/articles/4407830972050-Find-and-stop-process-blocking-a-port)
+
+```powershell
+.\.venv\Scripts\python.exe -m robot_pickup --source 0 --display --serial-port COM3 --distance serial
+```
+
+In the preview, show the eraser to the webcam and move a flat object toward or away from the HC-SR04. Look for the `black-eraser` box and a changing `Beam … cm` reading. `IDLE` is expected while you test telemetry. The beam reading is the sensor's echo, which can come from another surface. Align and calibrate the sensor relative to the camera before using that reading for pickup.
+
 ## Range input and calibration
 
 The serial adapter shares a port for command exchange and range telemetry. `--source 0 --serial-port COM3 --distance serial --display` opens a telemetry-only session with a mock command link. In the preview, `beam` shows the latest valid raw echo. Without a port or network endpoint, a camera session has unknown range.
