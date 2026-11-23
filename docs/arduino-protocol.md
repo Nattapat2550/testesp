@@ -55,27 +55,29 @@ Choose and test a watchdog interval against stopping distance, controller rate, 
 With `--position-only`, Python publishes a `target` message to the terminal and optionally to `--serial-port`. The ESP32 firmware can use these messages as camera input for its own controller. Use 115200 baud by default and read one JSON object per newline.
 
 ```json
-{"type":"target","found":true,"label":"black-eraser","object_id":1,"confidence":0.73,"cx":0.25,"cy":-0.5,"x_px":400.0,"y_px":120.0,"frame_width":640,"frame_height":480}
+{"type":"target","found":true,"label":"black-eraser","object_id":1,"confidence":0.73,"cx":0.25,"cy":-0.5,"x_px":400.0,"y_px":120.0,"frame_width":640,"frame_height":480,"pickup_cx":0.10,"pickup_cy":0.40}
 {"type":"target","found":false}
 ```
 
 - `found: true` reports the center of the selected tracked object. `cx` and `cy` are normalized to `[-1, 1]`, with `(0, 0)` at the center. Positive x points right and positive y points down. Pixel coordinates use the top-left of the frame as the origin.
 - `object_id` identifies the track within the current run. `confidence` is the detector's confidence in `[0, 1]` when available, or `null` for HSV. The frame dimensions are in pixels.
+- `pickup_cx` and `pickup_cy` are optional. When both are present, they give the taught reference for the current camera source, frame size, and target label. The ESP32 header exposes these as `pickupCx`, `pickupCy`, and `hasPickupPoint`.
 - Python publishes up to 10 fresh position messages per second. It sends `found: false` when the target disappears, the camera data gets stale, or the stream ends. On an interruption, the ESP32 should also expire the last position locally when no fresh message arrives within its chosen timeout. Reset the stored position immediately on `found: false`.
 - The message supplies an image position. The ESP32 firmware owns its motor and gripper decisions and can read the ultrasonic sensor directly for approach distance.
 
-Press **P** in the position preview with the eraser at the gripper's reachable spot. The saved `pickup-point.json` contains `pickup_cx` and `pickup_cy` for the current camera mount. Copy those values into the ESP32 firmware. The image-space correction is `cx - pickup_cx` and `cy - pickup_cy`. Measure the allowed error and check the wheel directions on the robot before running the grasp. The saved point is local to the PC and the target stream keeps its existing fields.
+Press **P** in the position preview with the eraser at the gripper's reachable spot. Python saves the point to `pickup-point.json` and sends the two reference fields alongside live positions, including on later runs with the same camera source. The image-space correction is `cx - pickup_cx` and `cy - pickup_cy`. Keep the base stopped when the point is missing. Measure the allowed error and check the wheel directions on the robot before running the grasp. Teach the point again if the camera mount or framing changes.
 
 ### ESP32 receiver example
 
-The [target receiver sketch](../arduino/esp32_target_receiver/esp32_target_receiver.ino) reads the USB messages and prints its decisions. Install ArduinoJson 7, select **ESP32 Dev Module** in Arduino IDE, and upload the sketch for a bench test. Open Serial Monitor with **115200 baud** and **Newline** selected. With the example pickup point `(0.10, 0.40)`, send these lines one at a time. [ArduinoJson installation guide](https://arduinojson.org/v7/how-to/install-arduinojson/)
+The [target receiver sketch](../arduino/esp32_target_receiver/esp32_target_receiver.ino) reads the USB messages and prints its decisions. Install ArduinoJson 7, select **ESP32 Dev Module** in Arduino IDE, and upload the sketch for a bench test. Open Serial Monitor with **115200 baud** and **Newline** selected. These sample messages use a pickup point of `(0.10, 0.40)`. Send them one at a time. [ArduinoJson installation guide](https://arduinojson.org/v7/how-to/install-arduinojson/)
 
-| Serial input                                         | Expected decision |
-| ---------------------------------------------------- | ----------------- |
-| `{"type":"target","found":true,"cx":0.30,"cy":0.40}` | `TURN_RIGHT`      |
-| `{"type":"target","found":true,"cx":0.11,"cy":0.20}` | `APPROACH`        |
-| `{"type":"target","found":true,"cx":0.11,"cy":0.39}` | `READY_TO_PICK`   |
-| `{"type":"target","found":false}`                    | `STOP`            |
+| Serial input | Expected decision |
+| --- | --- |
+| `{"type":"target","found":true,"cx":0.30,"cy":0.40}` | `WAIT_FOR_PICKUP_POINT` |
+| `{"type":"target","found":true,"cx":0.30,"cy":0.40,"pickup_cx":0.10,"pickup_cy":0.40}` | `TURN_RIGHT` |
+| `{"type":"target","found":true,"cx":0.11,"cy":0.20,"pickup_cx":0.10,"pickup_cy":0.40}` | `APPROACH` |
+| `{"type":"target","found":true,"cx":0.11,"cy":0.39,"pickup_cx":0.10,"pickup_cy":0.40}` | `READY_TO_PICK` |
+| `{"type":"target","found":false}` | `STOP` |
 
 The sketch prints a decision when it changes. The target expires after 500 ms without a fresh message. Close Serial Monitor before running Python with `--position-only --serial-port` so Python can open that port.
 
@@ -87,11 +89,11 @@ In the Python terminal, a run using `--position-only --serial-port COM3` can loo
 INFO Target position output using YOLO (best.pt)
 INFO Sending target positions on COM3 at 115200 baud
 {"type":"target","found":false}
-{"type":"target","found":true,"label":"black-eraser","object_id":1,"confidence":0.75,"cx":0.3,"cy":0.4,"x_px":416.0,"y_px":336.0,"frame_width":640,"frame_height":480}
+{"type":"target","found":true,"label":"black-eraser","object_id":1,"confidence":0.75,"cx":0.3,"cy":0.4,"x_px":416.0,"y_px":336.0,"frame_width":640,"frame_height":480,"pickup_cx":0.1,"pickup_cy":0.4}
 {"type":"target","found":false}
 ```
 
-Python writes the JSON lines to USB. To see the ESP32's reply in Serial Monitor, close Python, open the monitor at **115200 baud** with **Newline** selected, and send just the `found:true` line from the example above. With the sketch's example pickup point `(0.10, 0.40)`, you can see this sequence.
+Python writes the JSON lines to USB. To see the ESP32's reply in Serial Monitor, close Python, open the monitor at **115200 baud** with **Newline** selected, and send the `found:true` line from the example above. You can see this sequence.
 
 ```text
 STOP
@@ -101,4 +103,4 @@ STOP
 
 The first `STOP` is the sketch waiting for a target. `TURN_RIGHT` comes from `cx` being 0.20 to the right of the pickup point. The final `STOP` appears after 500 ms without a fresh target message.
 
-For the motor firmware, replace the example pickup coordinates with the values you taught. The example assumes floor targets move lower in the image as the car approaches. Verify this on the mounted camera and check clearance before driving. Connect the decisions to the actual motor driver and arm code. On `READY_TO_PICK`, stop the base and start the grasp once, then wait for the grasp to finish before accepting another pickup.
+The example assumes floor targets move lower in the image as the car approaches. Verify this on the mounted camera and check clearance before driving. Connect the decisions to the actual motor driver and arm code. On `READY_TO_PICK`, stop the base and start the grasp once, then wait for the grasp to finish before accepting another pickup.

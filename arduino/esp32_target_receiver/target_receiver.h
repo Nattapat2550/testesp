@@ -7,6 +7,9 @@
 struct TargetPosition {
   float cx = 0.0f;
   float cy = 0.0f;
+  bool hasPickupPoint = false;
+  float pickupCx = 0.0f;
+  float pickupCy = 0.0f;
 };
 
 class TargetReceiver {
@@ -53,19 +56,33 @@ class TargetReceiver {
         !message["cx"].is<float>() || !message["cy"].is<float>()) {
       return;
     }
-    const float cx = message["cx"].as<float>();
-    const float cy = message["cy"].as<float>();
-    if (cx >= -1.0f && cx <= 1.0f && cy >= -1.0f && cy <= 1.0f) {
-      position_.cx = cx;
-      position_.cy = cy;
-      receivedAtMs_ = millis();
-      found_ = true;
+    TargetPosition position;
+    position.cx = message["cx"].as<float>();
+    position.cy = message["cy"].as<float>();
+    if (!validCoordinate(position.cx) || !validCoordinate(position.cy)) {
+      return;
     }
+    if (message["pickup_cx"].is<float>() && message["pickup_cy"].is<float>()) {
+      const float pickupCx = message["pickup_cx"].as<float>();
+      const float pickupCy = message["pickup_cy"].as<float>();
+      if (validCoordinate(pickupCx) && validCoordinate(pickupCy)) {
+        position.hasPickupPoint = true;
+        position.pickupCx = pickupCx;
+        position.pickupCy = pickupCy;
+      }
+    }
+    position_ = position;
+    receivedAtMs_ = millis();
+    found_ = true;
   }
 
  private:
+  static bool validCoordinate(float value) {
+    return value >= -1.0f && value <= 1.0f;
+  }
+
   Stream& input_;
-  char line_[256];
+  char line_[512];
   size_t length_ = 0;
   bool discardLine_ = false;
   bool found_ = false;

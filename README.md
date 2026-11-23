@@ -63,8 +63,10 @@ Use `Serial.begin(115200);` once in your existing `setup()`. Then add this to yo
 eraserReceiver.poll();
 
 TargetPosition eraser;
-if (eraserReceiver.latest(eraser)) {
-  // Use eraser.cx and eraser.cy in your existing movement logic.
+if (eraserReceiver.latest(eraser) && eraser.hasPickupPoint) {
+  const float errorX = eraser.cx - eraser.pickupCx;
+  const float errorY = eraser.cy - eraser.pickupCy;
+  // Use errorX and errorY in your existing movement logic.
 } else {
   // Call your motor driver's stop function.
 }
@@ -76,8 +78,8 @@ if (eraserReceiver.latest(eraser)) {
 
 1. Fix the ESP32-CAM to the chassis on its centerline and aim it at the floor in front of the gripper. Keep the car parked with motor power off during setup.
 2. Put the eraser where the gripper can reach it from a repeatable arm pose. Mark that spot on the floor and put the arm in its driving pose so the camera can see the eraser.
-3. Run the position preview above with the mounted camera's MJPEG URL. Once it shows the eraser, focus the preview and press **P**. Python saves `pickup_cx` and `pickup_cy` to `pickup-point.json` in the project folder. Pressing **P** on a fresh detection replaces the saved point.
-4. Give `pickup-point.json` and the target message format to the Arduino teammate. The firmware can compare each live `cx` and `cy` with the saved values, adjust the base, and stop inside a tolerance measured on the robot before running the arm's lower, close, and lift sequence. Check the correction directions on the assembled robot and relearn the pickup spot after changing the camera mount or image framing.
+3. Run the position preview above with the mounted camera's MJPEG URL. Once it shows the eraser, focus the preview and press **P**. Python saves `pickup_cx` and `pickup_cy` to `pickup-point.json` in the project folder and includes them with the live positions when the source, frame size, and eraser label match. Use `--serial-port` to send them to the ESP32.
+4. Use `hasPickupPoint`, `pickupCx`, and `pickupCy` from the receiver to compare the live coordinates with the transmitted point. The example waits for both values before choosing a movement. Check the correction directions and tolerance on the assembled robot. Press **P** again after changing the camera mount or framing, or to update a point saved before the camera source was recorded.
 
 ## Test the HC-SR04 with a camera
 
