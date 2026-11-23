@@ -1,6 +1,7 @@
 import argparse
 import logging
 from contextlib import ExitStack
+from importlib.util import find_spec
 from pathlib import Path
 from threading import Event
 from time import monotonic
@@ -49,15 +50,17 @@ def _run_simulation(config: Config, display: bool) -> int:
 
 
 def _run_camera(args: argparse.Namespace, config: Config, source: CameraSource, distance_kind: str) -> int:
-    vision = CameraVision(source, config.camera, config.perception.pipeline())
     mode = "Hardware" if args.hardware else "Dry-run"
     LOG.info("%s camera session%s", mode, " (preview only)" if not args.activate else "")
     if config.perception.backend == "hsv":
         LOG.info("HSV detector colors: %s", ", ".join(color.label for color in config.perception.colors))
+        detector_name = "HSV colors"
     else:
         LOG.info("YOLO detector weights: %s", config.perception.yolo_weights)
+        detector_name = f"YOLO ({Path(config.perception.yolo_weights).name})"
     if distance_kind == "none":
         LOG.info("No range sensor configured. Preview will show detections and tracking IDs.")
+    vision = CameraVision(source, config.camera, config.perception.pipeline())
     pace = Event()
     with ExitStack() as stack:
         serial = None
@@ -84,7 +87,7 @@ def _run_camera(args: argparse.Namespace, config: Config, source: CameraSource, 
                                       config.control, config.target)
         vision.start()
         stack.callback(vision.close)
-        window = DebugWindow() if args.display else None
+        window = DebugWindow(f"Robot pickup - {detector_name}") if args.display else None
         if window is not None:
             stack.callback(window.close)
         stack.callback(lambda: controller.abort(monotonic(), "run ended by operator"))
@@ -104,7 +107,7 @@ def _run_camera(args: argparse.Namespace, config: Config, source: CameraSource, 
                 controller.abort(now, "recorded video ended")
                 return _result(controller, mode)
             if snapshot is None and now >= startup_deadline:
-                LOG.error("No camera frame before the startup timeout")
+                LOG.error("No processed camera frame before the startup timeout")
                 return 2
 
             scene = snapshot.scene if snapshot is not None else None
@@ -148,7 +151,12 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s %(message)s")
 
     try:
-        config = load_config(args.config)
+        config_path = args.config
+        if config_path is None and args.source is not None and args.source.isdecimal() and not (args.activate or args.hardware):
+            eraser_preset = Path("config/eraser.example.json")
+            if eraser_preset.is_file() and Path("best.pt").is_file() and find_spec("ultralytics") is not None:
+                config_path = eraser_preset
+        config = load_config(config_path)
         if args.source is None:
             if args.hardware or args.serial_port or args.distance or args.distance_url:
                 parser.error("camera source is required for hardware and external distance options")

@@ -1,4 +1,7 @@
 {
+  "camera": {
+    "startup_timeout_s": 30.0
+  },
   "perception": {
     "backend": "yolo",
     "yolo_weights": "best.pt"

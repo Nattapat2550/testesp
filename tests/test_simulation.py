@@ -56,3 +56,17 @@ class SimulationTests(unittest.TestCase):
                     main(["--source", "0", "--serial-port", "COM3", "--hardware", *flags])
                 self.assertEqual(error.exception.code, 2)
                 serial_open.assert_not_called()
+
+    def test_webcam_preview_uses_bundled_eraser_model_when_available(self):
+        cases = (
+            (object(), [], "yolo"),
+            (None, [], "hsv"),
+            (object(), ["--config", "config/pickup.example.json"], "hsv"),
+            (object(), ["--activate"], "hsv"),
+        )
+        for yolo_available, flags, expected_backend in cases:
+            with self.subTest(flags=flags, backend=expected_backend):
+                with patch("robot_pickup.__main__.find_spec", return_value=yolo_available), \
+                     patch("robot_pickup.__main__._run_camera", return_value=0) as run_camera:
+                    self.assertEqual(main(["--source", "0", "--display", *flags]), 0)
+                    self.assertEqual(run_camera.call_args.args[1].perception.backend, expected_backend)

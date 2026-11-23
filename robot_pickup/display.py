@@ -51,7 +51,8 @@ def _text(frame: Frame, value: str, origin: tuple[int, int], color: tuple[int, i
 
 
 class DebugWindow:
-    title = "Robot pickup"
+    def __init__(self, title: str = "Robot pickup") -> None:
+        self.title = title
 
     def show(self, snapshot: VisionSnapshot, status: ControlStatus, beam: BeamSettings) -> bool:
         cv2.imshow(self.title, draw_overlay(snapshot, status, beam))

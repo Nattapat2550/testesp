@@ -24,7 +24,7 @@ For the ESP32-CAM, pass the board's actual HTTP/MJPEG URL to `--source`. Espress
 
 Camera sessions start in `IDLE`. Add `--activate` to exercise the controller with the mock Arduino. Add `--config config/pickup.example.json` to load the example settings, which detect red and green objects and select red. An empty `target.labels` list allows any detected label. `target.strategy` accepts `centered` or `largest`. HSV detections have no confidence score. Configure hue as `0–179` and saturation and value as `0–255` under `perception.colors`. The two red ranges handle hue wraparound.
 
-To detect a black or wrapped eraser, install the optional YOLO extra with `python -m pip install -e '.[yolo]'` and use the preset for the bundled `best.pt` model.
+With the optional YOLO extra installed and `best.pt` present, a plain webcam preview from the repository root uses the eraser preset. The window title shows the active detector. Install the extra with `python -m pip install -e '.[yolo]'`. You can also load the preset explicitly for a webcam, recorded video, or ESP32-CAM stream.
 
 ```sh
 python -m robot_pickup --source 0 --display --config config/eraser.example.json
