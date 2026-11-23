@@ -15,6 +15,7 @@ from robot_pickup.control.controller import PickupController, PickupResult
 from robot_pickup.display import DebugWindow
 from robot_pickup.models import is_fresh
 from robot_pickup.perception.camera import CameraSource, CameraVision
+from robot_pickup.position_output import run_position_output
 from robot_pickup.sensors.association import BeamAssociation
 from robot_pickup.sensors.distance import DistanceProvider, FilteredDistance, HTTPDistance, NoDistance
 from robot_pickup.simulation import Simulation
@@ -141,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
     inputs.add_argument("--source", help="webcam index, HTTP/MJPEG URL, or local video file")
     parser.add_argument("--config", type=Path, help="JSON settings file (see config/pickup.example.json)")
     parser.add_argument("--display", action="store_true", help="show the OpenCV preview; press Q or Esc to exit")
+    parser.add_argument("--position-only", action="store_true", help="output target coordinates as JSON, with optional serial output")
     parser.add_argument("--activate", action="store_true", help="start the controller once a camera frame arrives")
     parser.add_argument("--hardware", action="store_true", help="send commands to a serial Arduino instead of the mock")
     parser.add_argument("--serial-port", help="Arduino port, e.g. COM3 or /dev/ttyACM0")
@@ -151,8 +153,11 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s %(message)s")
 
     try:
+        if args.position_only and (args.source is None or args.activate or args.hardware or args.distance or args.distance_url):
+            parser.error("use --position-only with --source and optional --serial-port, without activation or distance options")
         config_path = args.config
-        if config_path is None and args.source is not None and args.source.isdecimal() and not (args.activate or args.hardware):
+        if (config_path is None and args.source is not None and not (args.activate or args.hardware)
+                and (args.position_only or args.source.isdecimal())):
             eraser_preset = Path("config/eraser.example.json")
             if eraser_preset.is_file() and Path("best.pt").is_file() and find_spec("ultralytics") is not None:
                 config_path = eraser_preset
@@ -163,6 +168,8 @@ def main(argv: list[str] | None = None) -> int:
             return _run_simulation(config, args.display)
 
         source = CameraSource.parse(args.source)
+        if args.position_only:
+            return run_position_output(config, source, args.display, args.serial_port)
         distance_kind = args.distance or ("http" if args.distance_url else "serial" if args.serial_port else "none")
         if distance_kind == "serial" and not args.serial_port:
             parser.error("serial distance requires --serial-port")

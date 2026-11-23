@@ -49,3 +49,17 @@ Speeds are normalized to `[-1, 1]`. Positive linear is forward and positive angu
 Python cannot guarantee delivery of a stop once the link drops, the host freezes, or a write fails. Implement a watchdog in the Arduino motor and arm loop independent of serial parsing. If the deadline passes without an accepted command or heartbeat, stop the base, safely halt any arm motion, and handle the gripper according to the robot's holding requirements. Keep motion disabled until the host establishes a new stopped session. Invalid messages must leave the deadline unchanged.
 
 Choose and test a watchdog interval against stopping distance, controller rate, and serial jitter. The default heartbeat is 120 ms. Verify the watchdog by disconnecting the serial cable during a controlled low-speed test and during an arm action.
+
+## Target position output
+
+With `--position-only`, Python publishes a `target` message to the terminal and optionally to `--serial-port`. The ESP32 firmware can use these messages as camera input for its own controller. Use 115200 baud by default and read one JSON object per newline.
+
+```json
+{"type":"target","found":true,"label":"black-eraser","object_id":1,"confidence":0.73,"cx":0.25,"cy":-0.5,"x_px":400.0,"y_px":120.0,"frame_width":640,"frame_height":480}
+{"type":"target","found":false}
+```
+
+- `found: true` reports the center of the selected tracked object. `cx` and `cy` are normalized to `[-1, 1]`, with `(0, 0)` at the center. Positive x points right and positive y points down. Pixel coordinates use the top-left of the frame as the origin.
+- `object_id` identifies the track within the current run. `confidence` is the detector's confidence in `[0, 1]` when available, or `null` for HSV. The frame dimensions are in pixels.
+- Python publishes up to 10 fresh position messages per second. It sends `found: false` when the target disappears, the camera data gets stale, or the stream ends. On an interruption, the ESP32 should also expire the last position locally when no fresh message arrives within its chosen timeout. Reset the stored position immediately on `found: false`.
+- The message supplies an image position. The ESP32 firmware owns its motor and gripper decisions and can read the ultrasonic sensor directly for approach distance.

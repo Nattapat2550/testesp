@@ -32,6 +32,18 @@ python -m robot_pickup --source 0 --display --config config/eraser.example.json
 
 For other YOLO models, set `perception.yolo_weights` and `target.labels` in your configuration. Preview on a camera or video before using a model for control.
 
+## Send the eraser position to Arduino
+
+Use position-only mode when the Arduino firmware will decide how to move. With YOLO installed and `best.pt` in the project root, this mode selects the eraser preset by default. Run it from the project folder.
+
+```powershell
+.\.venv\Scripts\python.exe -m robot_pickup --source 0 --position-only --display
+```
+
+Replace `0` with the ESP32-CAM MJPEG URL to use the separate camera. Add `--serial-port COM3` with the ESP32 controller's actual port to send the same lines over USB at **115200 baud**. Close Serial Monitor while Python has the port open.
+
+Each line reports the selected eraser's center. `cx` and `cy` run from −1 to +1. The image center is `(0, 0)`, x increases to the right, and y increases downward. `x_px` and `y_px` give the same position in pixels. See the [target position message format](docs/arduino-protocol.md#target-position-output) for the Arduino implementation.
+
 ## Test the HC-SR04 with a camera
 
 With USB unplugged and motor power disconnected, wire a standard 5 V HC-SR04 to your bench board. The ESP32 pin mapping is for a classic ESP32 DevKit or ESP32-WROOM-32 development board. Use the 5 V rail exposed by your board while powered over USB. The HC-SR04 `ECHO` output is 5 V and requires a divider before it reaches the ESP32 input. [ESP32 DevKitC pinout](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32/esp32-devkitc/user_guide.html) · [HC-SR04 pinout and logic levels](https://learn.adafruit.com/ultrasonic-sonar-distance-sensors/pinouts)

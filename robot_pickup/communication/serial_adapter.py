@@ -49,9 +49,12 @@ class SerialArduino:
         command = transmission.command
         message = {"type": "cmd", "seq": transmission.sequence, "command": command.kind.value,
                    "linear": command.linear, "angular": command.angular}
-        wire = (json.dumps(message, separators=(",", ":"), allow_nan=False) + "\n").encode("ascii")
+        self.write_line(json.dumps(message, separators=(",", ":"), allow_nan=False))
+
+    def write_line(self, line: str) -> None:
+        wire = (line + "\n").encode("ascii")
         if self._port.write(wire) != len(wire):
-            raise OSError("incomplete Arduino command write")
+            raise OSError("incomplete Arduino serial write")
 
     def poll(self, now: float) -> list[Event]:
         waiting = self._port.in_waiting
