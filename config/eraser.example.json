@@ -1,0 +1,9 @@
+{
+  "perception": {
+    "backend": "yolo",
+    "yolo_weights": "best.pt"
+  },
+  "target": {
+    "labels": ["black-eraser", "wrapped eraser"]
+  }
+}

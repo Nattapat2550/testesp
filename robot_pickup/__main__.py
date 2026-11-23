@@ -52,6 +52,12 @@ def _run_camera(args: argparse.Namespace, config: Config, source: CameraSource, 
     vision = CameraVision(source, config.camera, config.perception.pipeline())
     mode = "Hardware" if args.hardware else "Dry-run"
     LOG.info("%s camera session%s", mode, " (preview only)" if not args.activate else "")
+    if config.perception.backend == "hsv":
+        LOG.info("HSV detector colors: %s", ", ".join(color.label for color in config.perception.colors))
+    else:
+        LOG.info("YOLO detector weights: %s", config.perception.yolo_weights)
+    if distance_kind == "none":
+        LOG.info("No range sensor configured. Preview will show detections and tracking IDs.")
     pace = Event()
     with ExitStack() as stack:
         serial = None
@@ -84,7 +90,7 @@ def _run_camera(args: argparse.Namespace, config: Config, source: CameraSource, 
         stack.callback(lambda: controller.abort(monotonic(), "run ended by operator"))
         startup_deadline = monotonic() + config.camera.startup_timeout_s
         armed = False
-        visible_ids: set[int | None] = set()
+        visible_ids: set[int | None] | None = None
         while True:
             snapshot = vision.latest
             now = monotonic()

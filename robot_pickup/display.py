@@ -27,21 +27,21 @@ def draw_overlay(snapshot: VisionSnapshot, status: ControlStatus, beam: BeamSett
         _text(frame, title, (box.x1, max(16, box.y1 - 6)), color)
 
     command = status.motion
-    motion = "none" if command is None else f"{command.kind.value}  v={command.linear:+.2f}  w={command.angular:+.2f}"
+    motion = "No motion" if command is None else f"{command.kind.value}  v={command.linear:+.2f}  w={command.angular:+.2f}"
     if status.action is not None:
         motion += f"  |  {status.action.value}"
-    title = status.state.value
+    title = f"{status.state.value}  |  Detections {len(scene.objects)}"
     if status.target_id is not None:
         title += f"  |  target #{status.target_id}" + ("" if status.target_visible else " missing")
     if status.result is not None:
         title += f"  |  {status.result.value}"
-    if status.beam_cm is not None:
-        title += f"  |  beam {status.beam_cm:.1f} cm"
-    cv2.rectangle(frame, (0, 0), (scene.width, 56 if status.reason else 40), (20, 20, 20), -1)
+    beam_label = "Beam range unavailable" if status.beam_cm is None else f"Beam {status.beam_cm:.1f} cm"
+    cv2.rectangle(frame, (0, 0), (scene.width, 73 if status.reason else 56), (20, 20, 20), -1)
     _text(frame, title, (8, 16))
     _text(frame, motion, (8, 33))
+    _text(frame, beam_label, (8, 50))
     if status.reason:
-        _text(frame, status.reason, (8, 50), (100, 180, 255))
+        _text(frame, status.reason, (8, 67), (100, 180, 255))
     return frame
 
 
